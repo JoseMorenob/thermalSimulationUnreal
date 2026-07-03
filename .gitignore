@@ -1,0 +1,26 @@
+# Unreal Engine
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+Backup/
+UpgradeLog.htm
+
+# Visual Studio
+*.sln
+*.VC.db
+*.VC.opendb
+
+# Live Coding and generated logs
+*.log
+*.tmp
+*.pdb
+
+# Plugin generated outputs
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# OS
+Thumbs.db
+Desktop.ini

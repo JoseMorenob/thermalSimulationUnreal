@@ -1,0 +1,24 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "0.1.0",
+    "FriendlyName": "IR Simulator Plugin",
+    "Description": "Physics-based infrared camera simulator. Wraps ir_core library for UE5 integration. TFM — Jose Moreno Barbero, U-tad CGRVS.",
+    "Category": "Rendering",
+    "CreatedBy": "Jose Moreno Barbero",
+    "CreatedByURL": "",
+    "DocsURL": "",
+    "MarketplaceURL": "",
+    "SupportURL": "",
+    "CanContainContent": true,
+    "IsBetaVersion": true,
+    "IsExperimentalVersion": false,
+    "Installed": false,
+    "Modules": [
+        {
+            "Name": "IRSimPlugin",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        }
+    ]
+}
