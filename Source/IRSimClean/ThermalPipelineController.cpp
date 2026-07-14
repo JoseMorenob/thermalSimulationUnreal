@@ -26,6 +26,7 @@ void AThermalPipelineController::BeginPlay()
 
 void AThermalPipelineController::RefreshPipeline()
 {
+	UpdateThermalActorsSensorLocation();
 	ApplyThermalMaterialToActors();
 	RefreshCaptureActor();
 
@@ -37,9 +38,30 @@ void AThermalPipelineController::RefreshPipeline()
 
 void AThermalPipelineController::CaptureRadianceNow()
 {
+	UpdateThermalActorsSensorLocation();
+
 	if (RadianceCaptureActor)
 	{
 		RadianceCaptureActor->CaptureRadianceFrame();
+	}
+}
+
+void AThermalPipelineController::UpdateThermalActorsSensorLocation()
+{
+	if (!RadianceCaptureActor || !GetWorld())
+	{
+		return;
+	}
+
+	const FVector RadianceSensorLocation = RadianceCaptureActor->GetSensorWorldLocation();
+
+	for (TActorIterator<AThermalCubeActor> It(GetWorld()); It; ++It)
+	{
+		AThermalCubeActor* ThermalActor = *It;
+		if (ThermalActor)
+		{
+			ThermalActor->SetRadianceSensorWorldLocation(RadianceSensorLocation);
+		}
 	}
 }
 

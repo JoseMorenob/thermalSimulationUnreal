@@ -37,6 +37,12 @@ public:
 	float GetCurrentEmittedRadiance() const;
 
 	UFUNCTION(BlueprintPure, Category = "Thermal")
+	float GetCurrentSurfaceBandRadiance() const;
+
+	UFUNCTION(BlueprintPure, Category = "Thermal")
+	float GetCurrentAirBandRadiance() const;
+
+	UFUNCTION(BlueprintPure, Category = "Thermal")
 	float GetCurrentSensorRadiance(float DistanceMeters) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Thermal")
@@ -44,6 +50,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Thermal")
 	void RefreshThermalMaterial();
+
+	UFUNCTION(BlueprintCallable, Category = "Thermal")
+	void SetRadianceSensorWorldLocation(const FVector& WorldLocation);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Thermal")
@@ -87,7 +96,11 @@ protected:
 
 private:
 	void PushThermalDataToPrimitive();
+	float GetSensorDistanceMeters() const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DynamicDebugMaterial;
+
+	bool bHasRadianceSensorWorldLocation = false;
+	FVector RadianceSensorWorldLocation = FVector::ZeroVector;
 };

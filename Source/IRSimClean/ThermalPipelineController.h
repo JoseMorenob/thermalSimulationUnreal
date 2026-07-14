@@ -41,6 +41,7 @@ protected:
 	bool bCaptureAfterRefresh = true;
 
 private:
+	void UpdateThermalActorsSensorLocation();
 	void ApplyThermalMaterialToActors();
 	void RefreshCaptureActor();
 };

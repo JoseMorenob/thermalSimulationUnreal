@@ -2,14 +2,19 @@
 
 #include "RadianceCaptureActor.h"
 
+#include "Camera/CameraComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 
 ARadianceCaptureActor::ARadianceCaptureActor()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 
 	CaptureComponent = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("RadianceCapture"));
 	SetRootComponent(CaptureComponent);
@@ -29,6 +34,34 @@ void ARadianceCaptureActor::BeginPlay()
 {
 	Super::BeginPlay();
 	RefreshCapturePipeline();
+}
+
+void ARadianceCaptureActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (BoundPlayerCameraComponent && DynamicPlayerViewMaterial)
+	{
+		BoundPlayerCameraComponent->PostProcessSettings.RemoveBlendable(DynamicPlayerViewMaterial);
+	}
+
+	BoundPlayerCameraComponent = nullptr;
+	DynamicPlayerViewMaterial = nullptr;
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ARadianceCaptureActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (bFollowPlayerCamera)
+	{
+		SyncToPlayerCamera();
+	}
+
+	if (bShowRenderTargetOnPlayerCamera || DynamicPlayerViewMaterial)
+	{
+		UpdatePlayerCameraView();
+	}
 }
 
 void ARadianceCaptureActor::CaptureRadianceFrame()
@@ -52,9 +85,16 @@ UTextureRenderTarget2D* ARadianceCaptureActor::GetRadianceRenderTarget() const
 	return RadianceRenderTarget;
 }
 
+FVector ARadianceCaptureActor::GetSensorWorldLocation() const
+{
+	return CaptureComponent ? CaptureComponent->GetComponentLocation() : GetActorLocation();
+}
+
 void ARadianceCaptureActor::RefreshCapturePipeline()
 {
 	EnsureRenderTarget();
+	UpdatePlayerCameraView();
+
 	if (!CaptureComponent)
 	{
 		return;
@@ -110,4 +150,91 @@ void ARadianceCaptureActor::EnsureRenderTarget()
 	CaptureComponent->TextureTarget = RadianceRenderTarget;
 	CaptureComponent->bCaptureEveryFrame = bCaptureEveryFrame;
 	CaptureComponent->bCaptureOnMovement = bCaptureOnMovement;
+}
+
+void ARadianceCaptureActor::SyncToPlayerCamera()
+{
+	UCameraComponent* PlayerCameraComponent = FindPlayerCameraComponent();
+	if (PlayerCameraComponent)
+	{
+		SetActorLocationAndRotation(
+			PlayerCameraComponent->GetComponentLocation(),
+			PlayerCameraComponent->GetComponentRotation());
+		return;
+	}
+
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	if (PlayerController && PlayerController->PlayerCameraManager)
+	{
+		SetActorLocationAndRotation(
+			PlayerController->PlayerCameraManager->GetCameraLocation(),
+			PlayerController->PlayerCameraManager->GetCameraRotation());
+	}
+}
+
+void ARadianceCaptureActor::UpdatePlayerCameraView()
+{
+	UCameraComponent* PlayerCameraComponent = FindPlayerCameraComponent();
+	if (!PlayerCameraComponent)
+	{
+		if (BoundPlayerCameraComponent && DynamicPlayerViewMaterial)
+		{
+			BoundPlayerCameraComponent->PostProcessSettings.RemoveBlendable(DynamicPlayerViewMaterial);
+		}
+		BoundPlayerCameraComponent = nullptr;
+		DynamicPlayerViewMaterial = nullptr;
+		return;
+	}
+
+	const bool bShouldShowOnPlayerCamera =
+		bShowRenderTargetOnPlayerCamera && PlayerViewPostProcessMaterial && RadianceRenderTarget;
+
+	if (!bShouldShowOnPlayerCamera)
+	{
+		if (BoundPlayerCameraComponent && DynamicPlayerViewMaterial)
+		{
+			BoundPlayerCameraComponent->PostProcessSettings.RemoveBlendable(DynamicPlayerViewMaterial);
+		}
+		BoundPlayerCameraComponent = nullptr;
+		DynamicPlayerViewMaterial = nullptr;
+		return;
+	}
+
+	if (!DynamicPlayerViewMaterial || DynamicPlayerViewMaterial->Parent != PlayerViewPostProcessMaterial)
+	{
+		if (BoundPlayerCameraComponent && DynamicPlayerViewMaterial)
+		{
+			BoundPlayerCameraComponent->PostProcessSettings.RemoveBlendable(DynamicPlayerViewMaterial);
+		}
+
+		DynamicPlayerViewMaterial = UMaterialInstanceDynamic::Create(PlayerViewPostProcessMaterial, this);
+		PlayerCameraComponent->PostProcessSettings.AddBlendable(DynamicPlayerViewMaterial, 1.0f);
+		BoundPlayerCameraComponent = PlayerCameraComponent;
+	}
+	else if (BoundPlayerCameraComponent != PlayerCameraComponent)
+	{
+		if (BoundPlayerCameraComponent)
+		{
+			BoundPlayerCameraComponent->PostProcessSettings.RemoveBlendable(DynamicPlayerViewMaterial);
+		}
+		PlayerCameraComponent->PostProcessSettings.AddBlendable(DynamicPlayerViewMaterial, 1.0f);
+		BoundPlayerCameraComponent = PlayerCameraComponent;
+	}
+
+	if (DynamicPlayerViewMaterial)
+	{
+		DynamicPlayerViewMaterial->SetTextureParameterValue(PlayerViewTextureParameterName, RadianceRenderTarget);
+	}
+}
+
+UCameraComponent* ARadianceCaptureActor::FindPlayerCameraComponent() const
+{
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	if (!PlayerController)
+	{
+		return nullptr;
+	}
+
+	APawn* PlayerPawn = PlayerController->GetPawn();
+	return PlayerPawn ? PlayerPawn->FindComponentByClass<UCameraComponent>() : nullptr;
 }
