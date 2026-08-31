@@ -20,6 +20,12 @@ UpgradeLog.htm
 # Plugin generated outputs
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
+Packaged/
+Content/MOUT_Fabrication/
+Source/IRSimClean_LegacyMovedToPlugin/
+Plugins/IRSimPlugin/Content/Materials/*PreRepair*.uasset
+Plugins/IRSimPlugin/Content/Materials/*RepairedAttempt*.uasset
+Content/Materials/M_IR_PhysicalRadiance_Test.uasset
 
 # OS
 Thumbs.db

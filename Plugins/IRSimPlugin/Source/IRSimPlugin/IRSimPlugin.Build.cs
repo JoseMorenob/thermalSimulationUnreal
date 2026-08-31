@@ -5,20 +5,31 @@ public class IRSimPlugin : ModuleRules
     public IRSimPlugin(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+        PrecompileForTargets = PrecompileTargetsType.Any;
 
         PublicDependencyModuleNames.AddRange(
             new[]
             {
-                "Core"
+                "Core",
+                "CoreUObject",
+                "Engine"
             });
 
         PrivateDependencyModuleNames.AddRange(
             new[]
             {
-                "CoreUObject",
-                "Engine",
+                "InputCore",
                 "RenderCore",
                 "RHI"
             });
+
+        if (Target.bBuildEditor)
+        {
+            PrivateDependencyModuleNames.AddRange(
+                new[]
+                {
+                    "UnrealEd"
+                });
+        }
     }
 }

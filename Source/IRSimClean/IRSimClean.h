@@ -2,5 +2,7 @@
 
 #pragma once
 
+// Declaracion del modulo de la aplicacion de ejemplo del TFM
+
 #include "CoreMinimal.h"
 
