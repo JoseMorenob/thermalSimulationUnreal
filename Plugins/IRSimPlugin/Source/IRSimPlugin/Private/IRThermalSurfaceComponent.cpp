@@ -154,8 +154,7 @@ float UIRThermalSurfaceComponent::GetSensorDistanceMeters() const
 }
 
 void UIRThermalSurfaceComponent::PushThermalDataToPrimitive()
-{
-	// El material recibe los resultados mediante Custom Primitive Data por malla
+{borr// El material recibe los resultados mediante Custom Primitive Data por malla
 	UStaticMeshComponent* Mesh = ResolveTargetMesh();
 	if (!Mesh)
 	{
