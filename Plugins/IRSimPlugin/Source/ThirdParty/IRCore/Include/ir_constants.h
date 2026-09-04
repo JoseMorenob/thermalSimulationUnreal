@@ -1,12 +1,11 @@
 #pragma once
 
-// Constantes fisicas y limites espectrales usados por el plugin
-
 namespace ir {
 
 constexpr double PLANCK = 6.62607015e-34;
 constexpr double BOLTZMANN = 1.380649e-23;
 constexpr double SPEED_OF_LIGHT = 2.99792458e8;
+constexpr double STEFAN_BOLTZMANN = 5.670374419e-8;
 
 namespace band {
 constexpr double LWIR_LOW_UM = 8.0;

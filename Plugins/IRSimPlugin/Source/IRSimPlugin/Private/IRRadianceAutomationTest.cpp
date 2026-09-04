@@ -2,8 +2,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-// Test temporalmente desactivado hasta cerrar la escena de validacion definitiva
-/*
+// Test de integracion CPU frente a GPU en una escena minima controlada.
 
 #include "Misc/AutomationTest.h"
 
@@ -98,9 +97,10 @@ bool FIRRadianceCpuGpuMinimalSceneTest::RunTest(const FString& Parameters)
 	UIRThermalSurfaceComponent* GenericThermalSurface = NewObject<UIRThermalSurfaceComponent>(GenericMeshActor);
 	GenericMeshActor->AddInstanceComponent(GenericThermalSurface);
 	GenericThermalSurface->RegisterComponent();
-	GenericMeshActor->SetActorHiddenInGame(true);
 	DirectionalLight->SetActorRotation(FRotator(-45.0, 0.0, 0.0));
 	GenericThermalSurface->SetDebugMaterial(ThermalMaterial);
+	GenericThermalSurface->SetEmissivity(1.0f);
+	GenericThermalSurface->SetAtmosphericExtinctionCoefficient(0.0f);
 	ValidationActor->ConfigureSurfaceValidation(GenericThermalSurface, CaptureActor);
 
 	World->InitializeActorsForPlay(FURL());
@@ -127,6 +127,5 @@ bool FIRRadianceCpuGpuMinimalSceneTest::RunTest(const FString& Parameters)
 	return !HasAnyErrors();
 }
 
-*/
 
 #endif

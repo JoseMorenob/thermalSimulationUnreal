@@ -7,12 +7,15 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "IRThermalSurfaceComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "RenderingThread.h"
 
 // Capturador de la salida radiometrica del sensor virtual
@@ -30,6 +33,12 @@ ARadianceCaptureActor::ARadianceCaptureActor()
 	PlayerViewPostProcessComponent->bUnbound = true;
 	PlayerViewPostProcessComponent->bEnabled = false;
 	PlayerViewPostProcessComponent->BlendWeight = 1.0f;
+
+	AuxiliaryCaptureComponent = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("AuxiliaryCapture"));
+	AuxiliaryCaptureComponent->SetupAttachment(CaptureComponent);
+	AuxiliaryCaptureComponent->bCaptureEveryFrame = false;
+	AuxiliaryCaptureComponent->bCaptureOnMovement = false;
+	AuxiliaryCaptureComponent->bAlwaysPersistRenderingState = false;
 
 	CaptureComponent->CaptureSource = SCS_SceneColorHDRNoAlpha;
 	CaptureComponent->PostProcessBlendWeight = 0.0f;
@@ -93,6 +102,12 @@ void ARadianceCaptureActor::CaptureRadianceFrame()
 		CaptureComponent->CaptureScene();
 		FlushRenderingCommands();
 
+		if (bCaptureAuxiliaryBuffers)
+		{
+			CaptureAuxiliaryBuffers();
+		}
+
+
 		if (bHadPlayerViewPostProcess)
 		{
 			UpdatePlayerCameraView();
@@ -100,9 +115,133 @@ void ARadianceCaptureActor::CaptureRadianceFrame()
 	}
 }
 
+void ARadianceCaptureActor::CaptureSceneToTarget(
+	UTextureRenderTarget2D* Target,
+	ESceneCaptureSource Source)
+{
+	if (!AuxiliaryCaptureComponent || !Target)
+	{
+		return;
+	}
+
+	AuxiliaryCaptureComponent->TextureTarget = Target;
+	AuxiliaryCaptureComponent->CaptureSource = Source;
+	AuxiliaryCaptureComponent->PostProcessBlendWeight = 0.0f;
+	AuxiliaryCaptureComponent->ShowFlags.SetPostProcessing(false);
+	AuxiliaryCaptureComponent->CaptureScene();
+	FlushRenderingCommands();
+}
+
+void ARadianceCaptureActor::CaptureThermalMaterialToTarget(
+	UTextureRenderTarget2D* Target,
+	UMaterialInterface* BufferMaterial)
+{
+	if (!Target || !BufferMaterial || !GetWorld())
+	{
+		return;
+	}
+
+	struct FMaterialRestore
+	{
+		TObjectPtr<UStaticMeshComponent> Mesh;
+		TArray<TObjectPtr<UMaterialInterface>> Materials;
+	};
+
+	TArray<FMaterialRestore> Restores;
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		UIRThermalSurfaceComponent* ThermalSurface = It->FindComponentByClass<UIRThermalSurfaceComponent>();
+		UStaticMeshComponent* Mesh = ThermalSurface ? ThermalSurface->GetTargetMesh() : nullptr;
+		if (!Mesh)
+		{
+			continue;
+		}
+
+		FMaterialRestore& Restore = Restores.AddDefaulted_GetRef();
+		Restore.Mesh = Mesh;
+		for (int32 MaterialIndex = 0; MaterialIndex < Mesh->GetNumMaterials(); ++MaterialIndex)
+		{
+			Restore.Materials.Add(Mesh->GetMaterial(MaterialIndex));
+			Mesh->SetMaterial(MaterialIndex, BufferMaterial);
+		}
+	}
+
+	CaptureSceneToTarget(Target, SCS_SceneColorHDRNoAlpha);
+
+	for (const FMaterialRestore& Restore : Restores)
+	{
+		if (!Restore.Mesh)
+		{
+			continue;
+		}
+		for (int32 MaterialIndex = 0; MaterialIndex < Restore.Materials.Num(); ++MaterialIndex)
+		{
+			Restore.Mesh->SetMaterial(MaterialIndex, Restore.Materials[MaterialIndex]);
+		}
+	}
+}
+
+void ARadianceCaptureActor::CaptureAuxiliaryBuffers()
+{
+	// Temperature, emissivity and material ID are material-output passes. The
+	// corresponding materials are deliberately user-authored shells.
+	CaptureThermalMaterialToTarget(TemperatureRenderTarget, TemperatureBufferMaterial);
+	CaptureThermalMaterialToTarget(EmissivityRenderTarget, EmissivityBufferMaterial);
+	CaptureThermalMaterialToTarget(MaterialIdRenderTarget, MaterialIdBufferMaterial);
+
+	// Geometry buffers use Unreal's native scene capture sources.
+	CaptureSceneToTarget(DepthRenderTarget, SCS_SceneDepth);
+	CaptureSceneToTarget(NormalRenderTarget, SCS_Normal);
+}
+
 UTextureRenderTarget2D* ARadianceCaptureActor::GetRadianceRenderTarget() const
 {
 	return RadianceRenderTarget;
+}
+
+UTextureRenderTarget2D* ARadianceCaptureActor::GetTemperatureRenderTarget() const
+{
+	return TemperatureRenderTarget;
+}
+
+UTextureRenderTarget2D* ARadianceCaptureActor::GetEmissivityRenderTarget() const
+{
+	return EmissivityRenderTarget;
+}
+
+UTextureRenderTarget2D* ARadianceCaptureActor::GetDepthRenderTarget() const
+{
+	return DepthRenderTarget;
+}
+
+UTextureRenderTarget2D* ARadianceCaptureActor::GetNormalRenderTarget() const
+{
+	return NormalRenderTarget;
+}
+
+UTextureRenderTarget2D* ARadianceCaptureActor::GetMaterialIdRenderTarget() const
+{
+	return MaterialIdRenderTarget;
+}
+
+UTextureRenderTarget2D* ARadianceCaptureActor::GetDebugRenderTarget() const
+{
+	switch (DebugBuffer)
+	{
+	case EIRDebugBuffer::Temperature:
+		return TemperatureRenderTarget;
+	case EIRDebugBuffer::Emissivity:
+		return EmissivityRenderTarget;
+	case EIRDebugBuffer::Depth:
+		return DepthRenderTarget;
+	case EIRDebugBuffer::Normals:
+		return NormalRenderTarget;
+	case EIRDebugBuffer::MaterialId:
+		return MaterialIdRenderTarget;
+	case EIRDebugBuffer::Radiance:
+	default:
+		return RadianceRenderTarget;
+	}
 }
 
 FVector ARadianceCaptureActor::GetSensorWorldLocation() const
@@ -175,6 +314,11 @@ void ARadianceCaptureActor::RefreshCapturePipeline()
 	{
 		// La captura fisica no debe contener transformaciones de pantalla ni ajustes dependientes de exposicion
 		CaptureComponent->PostProcessSettings.WeightedBlendables.Array.Reset();
+		CaptureComponent->PostProcessSettings.bOverride_AutoExposureMethod = true;
+		CaptureComponent->PostProcessSettings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+		CaptureComponent->PostProcessSettings.bOverride_AutoExposureBias = true;
+		CaptureComponent->PostProcessSettings.AutoExposureBias = 0.0f;
+		CaptureComponent->ShowFlags.SetPostProcessing(false);
 	}
 }
 
@@ -205,9 +349,41 @@ void ARadianceCaptureActor::EnsureRenderTarget()
 		RadianceRenderTarget->UpdateResourceImmediate(true);
 	}
 
+	// Auxiliary buffers use linear floating-point formats and are kept separate
+	// from the physical radiance buffer. Their contents are written by the
+	// corresponding buffer capture/material pass, never by the debug palette.
+	auto EnsureAuxiliaryTarget = [this](
+		TObjectPtr<UTextureRenderTarget2D>& Target,
+		const TCHAR* Name,
+		EPixelFormat PixelFormat,
+		ETextureRenderTargetFormat RenderTargetFormat)
+	{
+		const bool bNeedsAuxiliaryRecreate = !Target
+			|| Target->SizeX != TargetWidth
+			|| Target->SizeY != TargetHeight
+			|| Target->RenderTargetFormat != RenderTargetFormat;
+
+		if (bNeedsAuxiliaryRecreate)
+		{
+			Target = NewObject<UTextureRenderTarget2D>(this, Name);
+			Target->RenderTargetFormat = RenderTargetFormat;
+			Target->ClearColor = FLinearColor::Black;
+			Target->bAutoGenerateMips = false;
+			Target->InitCustomFormat(TargetWidth, TargetHeight, PixelFormat, true);
+			Target->UpdateResourceImmediate(true);
+		}
+	};
+
+	EnsureAuxiliaryTarget(TemperatureRenderTarget, TEXT("TemperatureRenderTarget"), PF_FloatRGBA, RTF_RGBA16f);
+	EnsureAuxiliaryTarget(EmissivityRenderTarget, TEXT("EmissivityRenderTarget"), PF_FloatRGBA, RTF_RGBA16f);
+	EnsureAuxiliaryTarget(DepthRenderTarget, TEXT("DepthRenderTarget"), PF_R32_FLOAT, RTF_R32f);
+	EnsureAuxiliaryTarget(NormalRenderTarget, TEXT("NormalRenderTarget"), PF_FloatRGBA, RTF_RGBA16f);
+	EnsureAuxiliaryTarget(MaterialIdRenderTarget, TEXT("MaterialIdRenderTarget"), PF_R32_FLOAT, RTF_R32f);
+
 	CaptureComponent->TextureTarget = RadianceRenderTarget;
 	CaptureComponent->CaptureSource = SCS_SceneColorHDRNoAlpha;
 	CaptureComponent->PostProcessBlendWeight = 0.0f;
+	CaptureComponent->ShowFlags.SetPostProcessing(false);
 	CaptureComponent->bAlwaysPersistRenderingState = false;
 	CaptureComponent->bCaptureEveryFrame = false;
 	CaptureComponent->bCaptureOnMovement = false;
@@ -278,7 +454,7 @@ void ARadianceCaptureActor::UpdatePlayerCameraView()
 
 	if (DynamicPlayerViewMaterial)
 	{
-		DynamicPlayerViewMaterial->SetTextureParameterValue(PlayerViewTextureParameterName, RadianceRenderTarget);
+		DynamicPlayerViewMaterial->SetTextureParameterValue(PlayerViewTextureParameterName, GetDebugRenderTarget());
 		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("DisplayRadianceMin"), DisplayRadianceMin);
 		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("DisplayRadianceMax"), DisplayRadianceMax);
 		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("InvertDebugDisplay"), bInvertDebugDisplay ? 1.0f : 0.0f);

@@ -7,6 +7,13 @@ material = unreal.load_asset(MATERIAL_PATH)
 if not material:
     raise RuntimeError('Could not load {}'.format(MATERIAL_PATH))
 
+material.set_editor_property('material_domain', unreal.MaterialDomain.MD_SURFACE)
+material.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
+try:
+    material.set_editor_property('b_disable_pre_exposure_scale', True)
+except Exception:
+    material.set_editor_property('disable_pre_exposure_scale', True)
+
 if not unreal.load_asset(BACKUP_PATH):
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
     backup = asset_tools.duplicate_asset(
@@ -29,4 +36,4 @@ unreal.MaterialEditingLibrary.connect_material_property(
     sensor_radiance, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 unreal.MaterialEditingLibrary.recompile_material(material)
 unreal.EditorAssetLibrary.save_loaded_asset(material)
-unreal.log('IR_REPAIR material repaired: SensorRadiance -> Emissive Color (physical linear output)')
+unreal.log('IR_REPAIR material repaired: opaque SensorRadiance -> Emissive Color (physical linear output)')

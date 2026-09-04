@@ -8,8 +8,7 @@
 #include "RadianceCaptureActor.h"
 #include "TextureResource.h"
 
-// Validacion temporalmente desactivada
-/*
+// Validacion CPU frente al pixel fisico del Render Target.
 
 // Herramienta de comprobacion para comparar el valor CPU con el pixel generado
 // por el material fisico en el render target
@@ -190,5 +189,3 @@ bool AIRRadianceValidationActor::ReadRenderTargetRadiance(float& OutRadiance)
 	OutRadiance = Pixels[Index].R.GetFloat();
 	return true;
 }
-
-*/

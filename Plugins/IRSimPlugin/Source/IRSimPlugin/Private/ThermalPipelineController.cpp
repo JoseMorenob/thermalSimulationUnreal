@@ -13,6 +13,32 @@
 AThermalPipelineController::AThermalPipelineController()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+}
+
+void AThermalPipelineController::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (!SceneEnvironmentActor || !GetWorld())
+	{
+		return;
+	}
+
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		TInlineComponentArray<UIRThermalSurfaceComponent*> ThermalSurfaces(*It);
+		for (UIRThermalSurfaceComponent* ThermalSurface : ThermalSurfaces)
+		{
+			ThermalSurface->AdvanceThermalState(
+				DeltaSeconds,
+				SceneEnvironmentActor->IsThermalDynamicsEnabled(),
+				SceneEnvironmentActor->GetSolarIrradianceWm2(),
+				SceneEnvironmentActor->GetAirTemperatureK(),
+				SceneEnvironmentActor->GetEffectiveSkyTemperatureK());
+		}
+	}
+
+	ApplyThermalMaterialToActors();
 }
 
 void AThermalPipelineController::OnConstruction(const FTransform& Transform)

@@ -16,10 +16,8 @@ namespace
 	//ids de los Custom Primitive Data que recibe el material fisico
 	constexpr int32 CpdTemperatureK = 0;
 	constexpr int32 CpdEmissivity = 1;
-	constexpr int32 CpdTransmissivity = 2;
 	constexpr int32 CpdAirTemperatureK = 3;
 	constexpr int32 CpdSkyTemperatureK = 4;
-	constexpr int32 CpdAtmosphericBaseTransmittance = 5;
 	constexpr int32 CpdBandMinMicrons = 6;
 	constexpr int32 CpdBandMaxMicrons = 7;
 	constexpr int32 CpdSurfaceBandRadiance = 8;
@@ -32,6 +30,7 @@ namespace
 	constexpr int32 CpdUseDirectionalEmissivity = 15;
 	constexpr int32 CpdObjectBlackbodyBandRadiance = 16;
 	constexpr int32 CpdSkyBlackbodyBandRadiance = 17;
+	constexpr int32 CpdMaterialId = 18;
 }
 
 UIRThermalSurfaceComponent::UIRThermalSurfaceComponent()
@@ -51,6 +50,22 @@ void UIRThermalSurfaceComponent::BeginPlay()
 	RefreshThermalSurface();
 }
 
+void UIRThermalSurfaceComponent::AdvanceThermalState(
+	float DeltaTimeSeconds, bool bSceneDynamicsEnabled, float SolarIrradianceWm2,
+	float SceneAirTemperatureK, float SceneSkyTemperatureK)
+{
+	if (!bSceneDynamicsEnabled || !bEnableThermalDynamics)
+	{
+		return;
+	}
+
+	TemperatureK = irsim::core::ComputeThermalTemperatureStep(
+		TemperatureK, SolarIrradianceWm2, SolarAbsorptivity, SunExposure,
+		ConvectionCoefficientWm2K, SceneAirTemperatureK, SceneSkyTemperatureK,
+		Emissivity, ThermalCapacityJm2K, DeltaTimeSeconds);
+	RefreshThermalSurface();
+}
+
 void UIRThermalSurfaceComponent::RefreshThermalSurface()
 {
 	// Este es el punto unico de actualizacion despues de cambiar una propiedad
@@ -67,7 +82,6 @@ void UIRThermalSurfaceComponent::ApplySceneEnvironment(const AIRSceneEnvironment
 
 	AirTemperatureK = SceneEnvironment->GetAirTemperatureK();
 	EffectiveSkyTemperatureK = SceneEnvironment->GetEffectiveSkyTemperatureK();
-	AtmosphericTransmittance = SceneEnvironment->GetAtmosphericTransmittance();
 	AtmosphericExtinctionCoefficient = SceneEnvironment->GetAtmosphericExtinctionCoefficient();
 	BandMinMicrons = SceneEnvironment->GetBandMinMicrons();
 	BandMaxMicrons = SceneEnvironment->GetBandMaxMicrons();
@@ -88,6 +102,18 @@ void UIRThermalSurfaceComponent::SetTemperatureKelvin(float InTemperatureK)
 	RefreshThermalSurface();
 }
 
+void UIRThermalSurfaceComponent::SetEmissivity(float InEmissivity)
+{
+	Emissivity = FMath::Clamp(InEmissivity, 0.0f, 1.0f);
+	RefreshThermalSurface();
+}
+
+void UIRThermalSurfaceComponent::SetAtmosphericExtinctionCoefficient(float InCoefficient)
+{
+	AtmosphericExtinctionCoefficient = FMath::Max(InCoefficient, 0.0f);
+	RefreshThermalSurface();
+}
+
 void UIRThermalSurfaceComponent::SetDebugMaterial(UMaterialInterface* InDebugMaterial)
 {
 	DebugMaterial = InDebugMaterial;
@@ -102,7 +128,6 @@ float UIRThermalSurfaceComponent::GetCurrentSurfaceBandRadiance() const
 		TemperatureK,
 		EffectiveSkyTemperatureK,
 		Emissivity,
-		Transmissivity,
 		BandMinMicrons,
 		BandMaxMicrons,
 		SpectralIntegrationSamples);
@@ -124,11 +149,10 @@ float UIRThermalSurfaceComponent::GetCurrentSensorRadiance(float DistanceMeters)
 	const float TauFromDistance = irsim::core::ComputeAtmosphericTransmittance(
 		AtmosphericExtinctionCoefficient,
 		FMath::Max(DistanceMeters, 0.0f));
-	const float EffectiveTau = FMath::Clamp(AtmosphericTransmittance * TauFromDistance, 0.0f, 1.0f);
 	return irsim::core::ComputeSensorBandRadiance(
 		GetCurrentSurfaceBandRadiance(),
 		GetCurrentAirBandRadiance(),
-		EffectiveTau);
+		TauFromDistance);
 }
 
 UStaticMeshComponent* UIRThermalSurfaceComponent::ResolveTargetMesh() const
@@ -154,7 +178,8 @@ float UIRThermalSurfaceComponent::GetSensorDistanceMeters() const
 }
 
 void UIRThermalSurfaceComponent::PushThermalDataToPrimitive()
-{borr// El material recibe los resultados mediante Custom Primitive Data por malla
+{
+	// El material recibe los resultados mediante Custom Primitive Data por malla
 	UStaticMeshComponent* Mesh = ResolveTargetMesh();
 	if (!Mesh)
 	{
@@ -170,7 +195,8 @@ void UIRThermalSurfaceComponent::PushThermalDataToPrimitive()
 		}
 	}
 
-	const float Reflectivity = FMath::Max(0.0f, 1.0f - Emissivity - Transmissivity);
+	// Opaque gray-surface balance: rho = 1 - epsilon (Rogalski, 2011).
+	const float Reflectivity = FMath::Clamp(1.0f - Emissivity, 0.0f, 1.0f);
 	const float ObjectBlackbodyBandRadiance = irsim::core::ComputeBandRadiance(
 		TemperatureK,
 		1.0f,
@@ -189,11 +215,10 @@ void UIRThermalSurfaceComponent::PushThermalDataToPrimitive()
 	const float TauFromDistance = irsim::core::ComputeAtmosphericTransmittance(
 		AtmosphericExtinctionCoefficient,
 		GetSensorDistanceMeters());
-	const float AtmosphericTau = FMath::Clamp(AtmosphericTransmittance * TauFromDistance, 0.0f, 1.0f);
 	const float SensorRadiance = irsim::core::ComputeSensorBandRadiance(
 		SurfaceRadiance,
 		AirRadiance,
-		AtmosphericTau);
+		TauFromDistance);
 
 	if (DynamicDebugMaterial)
 	{
@@ -206,10 +231,9 @@ void UIRThermalSurfaceComponent::PushThermalDataToPrimitive()
 		DynamicDebugMaterial->SetScalarParameterValue(TEXT("Reflectivity"), Reflectivity);
 		DynamicDebugMaterial->SetScalarParameterValue(TEXT("ObjectBlackbodyBandRadiance"), ObjectBlackbodyBandRadiance);
 		DynamicDebugMaterial->SetScalarParameterValue(TEXT("SkyBlackbodyBandRadiance"), SkyBlackbodyBandRadiance);
-		DynamicDebugMaterial->SetScalarParameterValue(TEXT("Transmissivity"), Transmissivity);
 		DynamicDebugMaterial->SetScalarParameterValue(TEXT("AirTemperatureK"), AirTemperatureK);
 		DynamicDebugMaterial->SetScalarParameterValue(TEXT("SkyTemperatureK"), EffectiveSkyTemperatureK);
-		DynamicDebugMaterial->SetScalarParameterValue(TEXT("AtmosphericTau"), AtmosphericTau);
+		DynamicDebugMaterial->SetScalarParameterValue(TEXT("AtmosphericTau"), TauFromDistance);
 		DynamicDebugMaterial->SetScalarParameterValue(TEXT("SurfaceRadiance"), SurfaceRadiance);
 		DynamicDebugMaterial->SetScalarParameterValue(TEXT("SensorRadiance"), SensorRadiance);
 		DynamicDebugMaterial->SetScalarParameterValue(TEXT("AirRadiance"), AirRadiance);
@@ -221,10 +245,8 @@ void UIRThermalSurfaceComponent::PushThermalDataToPrimitive()
 
 	Mesh->SetCustomPrimitiveDataFloat(CpdTemperatureK, TemperatureK);
 	Mesh->SetCustomPrimitiveDataFloat(CpdEmissivity, Emissivity);
-	Mesh->SetCustomPrimitiveDataFloat(CpdTransmissivity, Transmissivity);
 	Mesh->SetCustomPrimitiveDataFloat(CpdAirTemperatureK, AirTemperatureK);
 	Mesh->SetCustomPrimitiveDataFloat(CpdSkyTemperatureK, EffectiveSkyTemperatureK);
-	Mesh->SetCustomPrimitiveDataFloat(CpdAtmosphericBaseTransmittance, AtmosphericTransmittance);
 	Mesh->SetCustomPrimitiveDataFloat(CpdBandMinMicrons, BandMinMicrons);
 	Mesh->SetCustomPrimitiveDataFloat(CpdBandMaxMicrons, BandMaxMicrons);
 	Mesh->SetCustomPrimitiveDataFloat(CpdSurfaceBandRadiance, SurfaceRadiance);
@@ -237,5 +259,6 @@ void UIRThermalSurfaceComponent::PushThermalDataToPrimitive()
 	Mesh->SetCustomPrimitiveDataFloat(CpdUseDirectionalEmissivity, bUseDirectionalEmissivity ? 1.0f : 0.0f);
 	Mesh->SetCustomPrimitiveDataFloat(CpdObjectBlackbodyBandRadiance, ObjectBlackbodyBandRadiance);
 	Mesh->SetCustomPrimitiveDataFloat(CpdSkyBlackbodyBandRadiance, SkyBlackbodyBandRadiance);
+	Mesh->SetCustomPrimitiveDataFloat(CpdMaterialId, static_cast<float>(MaterialId));
 	Mesh->MarkRenderStateDirty();
 }

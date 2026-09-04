@@ -21,7 +21,6 @@ namespace irsim::core
 		float ObjectTemperatureK,
 		float BackgroundTemperatureK,
 		float Emissivity,
-		float Transmissivity,
 		float BandMinMicrons,
 		float BandMaxMicrons,
 		int SampleCount);
@@ -30,6 +29,18 @@ namespace irsim::core
 		float SurfaceRadiance,
 		float AirRadiance,
 		float AtmosphericTransmittance);
+
+	float ComputeThermalTemperatureStep(
+		float ObjectTemperatureK,
+		float SolarIrradianceWm2,
+		float SolarAbsorptivity,
+		float SunExposure,
+		float ConvectionCoefficientWm2K,
+		float AirTemperatureK,
+		float SkyTemperatureK,
+		float Emissivity,
+		float ThermalCapacityJm2K,
+		float DeltaTimeSeconds);
 
 	float RadianceToIntensity(float Radiance, float MaxRadiance);
 

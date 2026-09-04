@@ -14,6 +14,18 @@ class UPostProcessComponent;
 class UTextureRenderTarget2D;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UIRThermalSurfaceComponent;
+
+UENUM(BlueprintType)
+enum class EIRDebugBuffer : uint8
+{
+	Radiance UMETA(DisplayName = "Radiance"),
+	Temperature UMETA(DisplayName = "Temperature"),
+	Emissivity UMETA(DisplayName = "Emissivity"),
+	Depth UMETA(DisplayName = "Depth"),
+	Normals UMETA(DisplayName = "Normals"),
+	MaterialId UMETA(DisplayName = "Material ID")
+};
 
 UCLASS(Blueprintable)
 class IRSIMPLUGIN_API ARadianceCaptureActor : public AActor
@@ -33,6 +45,21 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Radiance")
 	UTextureRenderTarget2D* GetRadianceRenderTarget() const;
+
+	UFUNCTION(BlueprintPure, Category = "Radiance|Buffers")
+	UTextureRenderTarget2D* GetTemperatureRenderTarget() const;
+
+	UFUNCTION(BlueprintPure, Category = "Radiance|Buffers")
+	UTextureRenderTarget2D* GetEmissivityRenderTarget() const;
+
+	UFUNCTION(BlueprintPure, Category = "Radiance|Buffers")
+	UTextureRenderTarget2D* GetDepthRenderTarget() const;
+
+	UFUNCTION(BlueprintPure, Category = "Radiance|Buffers")
+	UTextureRenderTarget2D* GetNormalRenderTarget() const;
+
+	UFUNCTION(BlueprintPure, Category = "Radiance|Buffers")
+	UTextureRenderTarget2D* GetMaterialIdRenderTarget() const;
 
 	UFUNCTION(BlueprintPure, Category = "Radiance")
 	FVector GetSensorWorldLocation() const;
@@ -58,6 +85,33 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Radiance", Transient)
 	TObjectPtr<UTextureRenderTarget2D> RadianceRenderTarget;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Radiance|Buffers", Transient)
+	TObjectPtr<UTextureRenderTarget2D> TemperatureRenderTarget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Radiance|Buffers", Transient)
+	TObjectPtr<UTextureRenderTarget2D> EmissivityRenderTarget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Radiance|Buffers", Transient)
+	TObjectPtr<UTextureRenderTarget2D> DepthRenderTarget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Radiance|Buffers", Transient)
+	TObjectPtr<UTextureRenderTarget2D> NormalRenderTarget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Radiance|Buffers", Transient)
+	TObjectPtr<UTextureRenderTarget2D> MaterialIdRenderTarget;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Buffers")
+	TObjectPtr<UMaterialInterface> TemperatureBufferMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Buffers")
+	TObjectPtr<UMaterialInterface> EmissivityBufferMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Buffers")
+	TObjectPtr<UMaterialInterface> MaterialIdBufferMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Buffers")
+	bool bCaptureAuxiliaryBuffers = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Player View")
 	bool bFollowPlayerCamera = false;
 
@@ -79,10 +133,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display")
 	bool bInvertDebugDisplay = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display")
+	EIRDebugBuffer DebugBuffer = EIRDebugBuffer::Radiance;
+
 private:
 	void EnsureRenderTarget();
+	void CaptureAuxiliaryBuffers();
+	void CaptureSceneToTarget(UTextureRenderTarget2D* Target, ESceneCaptureSource Source);
+	void CaptureThermalMaterialToTarget(UTextureRenderTarget2D* Target, UMaterialInterface* BufferMaterial);
 	void SyncToPlayerCamera();
 	void UpdatePlayerCameraView();
+	UTextureRenderTarget2D* GetDebugRenderTarget() const;
 	void ClearPlayerCameraView();
 	UCameraComponent* FindPlayerCameraComponent() const;
 
@@ -91,4 +152,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UCameraComponent> BoundPlayerCameraComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USceneCaptureComponent2D> AuxiliaryCaptureComponent;
 };

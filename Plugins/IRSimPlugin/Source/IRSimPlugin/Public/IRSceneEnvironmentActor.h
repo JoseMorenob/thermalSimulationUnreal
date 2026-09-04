@@ -18,7 +18,8 @@ public:
 
 	float GetAirTemperatureK() const { return AirTemperatureK; }
 	float GetEffectiveSkyTemperatureK() const { return EffectiveSkyTemperatureK; }
-	float GetAtmosphericTransmittance() const { return AtmosphericTransmittance; }
+	float GetSolarIrradianceWm2() const { return SolarIrradianceWm2; }
+	bool IsThermalDynamicsEnabled() const { return bEnableThermalDynamics; }
 	float GetAtmosphericExtinctionCoefficient() const { return AtmosphericExtinctionCoefficient; }
 	float GetBandMinMicrons() const { return BandMinMicrons; }
 	float GetBandMaxMicrons() const { return BandMaxMicrons; }
@@ -31,11 +32,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Environment")
 	float EffectiveSkyTemperatureK = 240.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Environment", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float AtmosphericTransmittance = 0.90f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Environment")
+	bool bEnableThermalDynamics = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Environment", meta = (ClampMin = "0.0"))
+	float SolarIrradianceWm2 = 1000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Environment", meta = (ClampMin = "0.0"))
-	float AtmosphericExtinctionCoefficient = 0.001f;
+	float AtmosphericExtinctionCoefficient = 0.015f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Sensor Band", meta = (ClampMin = "0.1"))
 	float BandMinMicrons = 8.0f;

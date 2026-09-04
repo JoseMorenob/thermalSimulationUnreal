@@ -24,6 +24,9 @@ public:
 	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
 
+	void AdvanceThermalState(float DeltaTimeSeconds, bool bSceneDynamicsEnabled,
+		float SolarIrradianceWm2, float AirTemperatureK, float SkyTemperatureK);
+
 	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface")
 	void RefreshThermalSurface();
 
@@ -37,7 +40,16 @@ public:
 	void SetTemperatureKelvin(float InTemperatureK);
 
 	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface")
+	void SetEmissivity(float InEmissivity);
+
+	UFUNCTION(BlueprintCallable, Category = "IR Thermal Environment")
+	void SetAtmosphericExtinctionCoefficient(float InCoefficient);
+
+	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface")
 	void SetDebugMaterial(UMaterialInterface* InDebugMaterial);
+
+	UFUNCTION(BlueprintPure, Category = "IR Thermal Surface")
+	UStaticMeshComponent* GetTargetMesh() const { return ResolveTargetMesh(); }
 
 	UFUNCTION(BlueprintPure, Category = "IR Thermal Surface")
 	float GetCurrentSurfaceBandRadiance() const;
@@ -58,11 +70,26 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface", meta = (ClampMin = "0.0"))
 	float TemperatureK = 300.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics")
+	bool bEnableThermalDynamics = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics", meta = (ClampMin = "0.0"))
+	float ThermalCapacityJm2K = 100000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float SolarAbsorptivity = 0.7f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float SunExposure = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics", meta = (ClampMin = "0.0"))
+	float ConvectionCoefficientWm2K = 10.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float Emissivity = 0.95f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float Transmissivity = 0.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface", meta = (ClampMin = "0"))
+	int32 MaterialId = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Directional Emissivity")
 	bool bUseDirectionalEmissivity = false;
@@ -86,8 +113,7 @@ private:
 
 	float AirTemperatureK = 293.15f;
 	float EffectiveSkyTemperatureK = 240.0f;
-	float AtmosphericTransmittance = 0.90f;
-	float AtmosphericExtinctionCoefficient = 0.001f;
+	float AtmosphericExtinctionCoefficient = 0.015f;
 	float BandMinMicrons = 8.0f;
 	float BandMaxMicrons = 12.0f;
 	int32 SpectralIntegrationSamples = 40;

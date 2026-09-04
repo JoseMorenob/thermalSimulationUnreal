@@ -14,8 +14,9 @@ if not material:
 unreal.MaterialEditingLibrary.delete_all_material_expressions(material)
 material.set_editor_property('material_domain', unreal.MaterialDomain.MD_SURFACE)
 material.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
-# SceneColorHDR is pre-exposed by UE5. Disable the automatic material scale so
-# the validation render target keeps SensorRadiance in physical units.
+# The physical capture must preserve SensorRadiance in linear units. Project
+# setting r.UsePreExposure=0 and the explicit SceneCapture settings provide the
+# invariant path; no exposure compensation belongs in this material.
 try:
     material.set_editor_property('b_disable_pre_exposure_scale', True)
 except Exception:
@@ -26,32 +27,8 @@ sensor_radiance = unreal.MaterialEditingLibrary.create_material_expression(
 sensor_radiance.set_editor_property('parameter_name', 'SensorRadiance')
 sensor_radiance.set_editor_property('default_value', 0.0)
 
-# SceneColorHDR is stored pre-exposed by UE5. Divide by the view's PreExposure
-# so the engine's later pre-exposure multiplication cancels out and the R
-# channel remains in W m^-2 sr^-1. This is a surface-material compensation;
-# the post-process-only Disable Pre-Exposure Scale flag is not available here.
-pre_exposure = unreal.MaterialEditingLibrary.create_material_expression(
-    material, unreal.MaterialExpressionViewProperty, -400, 180)
-# The Python wrapper drops the leading C++ "E" from the enum name.
-view_property_enum = getattr(unreal, 'MaterialExposedViewProperty', None)
-if view_property_enum is None:
-    raise RuntimeError('UE Python API does not expose MaterialExposedViewProperty')
-pre_exposure.set_editor_property(
-    'property', view_property_enum.MEVP_PRE_EXPOSURE)
-pre_exposure_guard = unreal.MaterialEditingLibrary.create_material_expression(
-    material, unreal.MaterialExpressionMax, -180, 180)
-pre_exposure_guard.set_editor_property('const_b', 0.0001)
-unreal.MaterialEditingLibrary.connect_material_expressions(
-    pre_exposure, '', pre_exposure_guard, 'A')
-physical_output = unreal.MaterialEditingLibrary.create_material_expression(
-    material, unreal.MaterialExpressionDivide, 40, 40)
-unreal.MaterialEditingLibrary.connect_material_expressions(
-    sensor_radiance, '', physical_output, 'A')
-unreal.MaterialEditingLibrary.connect_material_expressions(
-    pre_exposure_guard, '', physical_output, 'B')
-
 unreal.MaterialEditingLibrary.connect_material_property(
-    physical_output, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    sensor_radiance, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 unreal.MaterialEditingLibrary.recompile_material(material)
 unreal.EditorAssetLibrary.save_loaded_asset(material)
 unreal.log('IR_NEW_MATERIAL created {} with physical linear output'.format(ASSET_PATH))

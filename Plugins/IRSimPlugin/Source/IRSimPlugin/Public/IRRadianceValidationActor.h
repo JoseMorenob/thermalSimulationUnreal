@@ -2,8 +2,7 @@
 
 #pragma once
 
-// Validacion temporalmente desactivada mientras se consolida el pipeline principal
-/*
+// Actor de validacion CPU frente al Radiance Buffer RGBA16F.
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -30,7 +29,6 @@ public:
 	bool HasValidationPassed() const { return bValidationPassed; }
 
 protected:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Validation")
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Validation")
 	TObjectPtr<UIRThermalSurfaceComponent> TargetThermalSurface;
 
@@ -83,5 +81,3 @@ private:
 	bool ReadRenderTargetRadiance(float& OutRadiance);
 	bool ResolveTarget(FVector& OutWorldLocation, float& OutExpectedRadiance);
 };
-
-*/
