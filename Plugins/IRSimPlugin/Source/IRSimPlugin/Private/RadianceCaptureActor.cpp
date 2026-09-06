@@ -115,6 +115,16 @@ void ARadianceCaptureActor::CaptureRadianceFrame()
 	}
 }
 
+void ARadianceCaptureActor::SetAuxiliaryBufferMaterials(
+	UMaterialInterface* InTemperatureMaterial,
+	UMaterialInterface* InEmissivityMaterial,
+	UMaterialInterface* InMaterialIdMaterial)
+{
+	TemperatureBufferMaterial = InTemperatureMaterial;
+	EmissivityBufferMaterial = InEmissivityMaterial;
+	MaterialIdBufferMaterial = InMaterialIdMaterial;
+}
+
 void ARadianceCaptureActor::CaptureSceneToTarget(
 	UTextureRenderTarget2D* Target,
 	ESceneCaptureSource Source)
@@ -127,17 +137,30 @@ void ARadianceCaptureActor::CaptureSceneToTarget(
 	AuxiliaryCaptureComponent->TextureTarget = Target;
 	AuxiliaryCaptureComponent->CaptureSource = Source;
 	AuxiliaryCaptureComponent->PostProcessBlendWeight = 0.0f;
+	AuxiliaryCaptureComponent->bAlwaysPersistRenderingState = true;
 	AuxiliaryCaptureComponent->ShowFlags.SetPostProcessing(false);
+	AuxiliaryCaptureComponent->ShowFlags.SetTonemapper(false);
+	AuxiliaryCaptureComponent->ShowFlags.SetEyeAdaptation(false);
+	AuxiliaryCaptureComponent->ShowFlags.SetScreenSpaceReflections(false);
+#if WITH_DEV_AUTOMATION_TESTS
+	if (GIsAutomationTesting)
+	{
+		UE_LOG(LogTemp, Display, TEXT("IR target binding capture=%s source=%d destination=%s same_target=%d"),
+			*AuxiliaryCaptureComponent->GetPathName(), int32(Source), *Target->GetPathName(), AuxiliaryCaptureComponent->TextureTarget == Target);
+	}
+#endif
 	AuxiliaryCaptureComponent->CaptureScene();
 	FlushRenderingCommands();
 }
 
 void ARadianceCaptureActor::CaptureThermalMaterialToTarget(
 	UTextureRenderTarget2D* Target,
-	UMaterialInterface* BufferMaterial)
+	UMaterialInterface* BufferMaterial,
+	ESceneCaptureSource Source)
 {
 	if (!Target || !BufferMaterial || !GetWorld())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("IR auxiliary buffer capture skipped: missing target, material or world."));
 		return;
 	}
 
@@ -147,6 +170,13 @@ void ARadianceCaptureActor::CaptureThermalMaterialToTarget(
 		TArray<TObjectPtr<UMaterialInterface>> Materials;
 	};
 
+#if WITH_DEV_AUTOMATION_TESTS
+	if (GIsAutomationTesting)
+	{
+		UE_LOG(LogTemp, Display, TEXT("IR target material destination=%s applied_material=%s source=%d"),
+			*Target->GetPathName(), *BufferMaterial->GetPathName(), int32(Source));
+	}
+#endif
 	TArray<FMaterialRestore> Restores;
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
@@ -166,7 +196,10 @@ void ARadianceCaptureActor::CaptureThermalMaterialToTarget(
 		}
 	}
 
-	CaptureSceneToTarget(Target, SCS_SceneColorHDRNoAlpha);
+	// SetMaterial only queues the primitive render-state update. Wait until the
+	// replacement material is visible to the render thread before capturing.
+	FlushRenderingCommands();
+	CaptureSceneToTarget(Target, Source);
 
 	for (const FMaterialRestore& Restore : Restores)
 	{
@@ -178,20 +211,30 @@ void ARadianceCaptureActor::CaptureThermalMaterialToTarget(
 		{
 			Restore.Mesh->SetMaterial(MaterialIndex, Restore.Materials[MaterialIndex]);
 		}
+		Restore.Mesh->MarkRenderStateDirty();
 	}
+	FlushRenderingCommands();
 }
 
 void ARadianceCaptureActor::CaptureAuxiliaryBuffers()
 {
 	// Temperature, emissivity and material ID are material-output passes. The
 	// corresponding materials are deliberately user-authored shells.
+	if (!TemperatureBufferMaterial || !EmissivityBufferMaterial || !MaterialIdBufferMaterial)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("IR auxiliary buffer material is not assigned on RadianceCaptureActor."));
+	}
 	CaptureThermalMaterialToTarget(TemperatureRenderTarget, TemperatureBufferMaterial);
 	CaptureThermalMaterialToTarget(EmissivityRenderTarget, EmissivityBufferMaterial);
 	CaptureThermalMaterialToTarget(MaterialIdRenderTarget, MaterialIdBufferMaterial);
 
 	// Geometry buffers use Unreal's native scene capture sources.
 	CaptureSceneToTarget(DepthRenderTarget, SCS_SceneDepth);
-	CaptureSceneToTarget(NormalRenderTarget, SCS_Normal);
+	// Unlit thermal materials do not populate GBuffer normals (UE5.6
+	// BasePassPixelShader.usf clears MRT[1]). A flat lit material is required
+	// only during this geometry pass; restore all original slots afterwards.
+	CaptureThermalMaterialToTarget(NormalRenderTarget,
+		LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")), SCS_Normal);
 }
 
 UTextureRenderTarget2D* ARadianceCaptureActor::GetRadianceRenderTarget() const
@@ -241,6 +284,36 @@ UTextureRenderTarget2D* ARadianceCaptureActor::GetDebugRenderTarget() const
 	case EIRDebugBuffer::Radiance:
 	default:
 		return RadianceRenderTarget;
+	}
+}
+
+void ARadianceCaptureActor::GetDebugDisplayRange(float& OutMin, float& OutMax) const
+{
+	OutMin = DisplayRadianceMin;
+	OutMax = DisplayRadianceMax;
+
+	switch (DebugBuffer)
+	{
+	case EIRDebugBuffer::Emissivity:
+	case EIRDebugBuffer::Normals:
+		OutMin = 0.0f;
+		OutMax = 1.0f;
+		break;
+	case EIRDebugBuffer::Depth:
+		// SCS_SceneDepth is expressed in Unreal units (centimetres).
+		OutMin = 0.0f;
+		OutMax = FMath::Max(DebugDepthMaxCentimeters, 1.0f);
+		break;
+	case EIRDebugBuffer::MaterialId:
+		OutMin = 0.0f;
+		OutMax = FMath::Max(DebugMaterialIdMax, 1.0f);
+		break;
+	case EIRDebugBuffer::Temperature:
+		// Temperature is stored in kelvin; its range remains user-configurable.
+		break;
+	case EIRDebugBuffer::Radiance:
+	default:
+		break;
 	}
 }
 
@@ -319,6 +392,8 @@ void ARadianceCaptureActor::RefreshCapturePipeline()
 		CaptureComponent->PostProcessSettings.bOverride_AutoExposureBias = true;
 		CaptureComponent->PostProcessSettings.AutoExposureBias = 0.0f;
 		CaptureComponent->ShowFlags.SetPostProcessing(false);
+		CaptureComponent->ShowFlags.SetTonemapper(false);
+		CaptureComponent->ShowFlags.SetEyeAdaptation(false);
 	}
 }
 
@@ -328,6 +403,28 @@ void ARadianceCaptureActor::EnsureRenderTarget()
 	if (!CaptureComponent)
 	{
 		return;
+	}
+
+	// Keep the auxiliary capture configuration self-contained. The assets are
+	// existing user-authored buffer materials; this only resolves missing
+	// references on the actor and never edits their graphs.
+	if (!TemperatureBufferMaterial)
+	{
+		TemperatureBufferMaterial = LoadObject<UMaterialInterface>(
+			nullptr,
+			TEXT("/IRSimPlugin/Materials/Buffers/M_IR_Output_Temperature.M_IR_Output_Temperature"));
+	}
+	if (!EmissivityBufferMaterial)
+	{
+		EmissivityBufferMaterial = LoadObject<UMaterialInterface>(
+			nullptr,
+			TEXT("/IRSimPlugin/Materials/Buffers/M_IR_Output_Emissivity.M_IR_Output_Emissivity"));
+	}
+	if (!MaterialIdBufferMaterial)
+	{
+		MaterialIdBufferMaterial = LoadObject<UMaterialInterface>(
+			nullptr,
+			TEXT("/IRSimPlugin/Materials/Buffers/M_IR_Output_MaterialId.M_IR_Output_MaterialId"));
 	}
 
 	// SceneCapture2D escribe un color de escena float4 y RGBA16F conserva la captura
@@ -345,6 +442,8 @@ void ARadianceCaptureActor::EnsureRenderTarget()
 		RadianceRenderTarget->RenderTargetFormat = DesiredRenderTargetFormat;
 		RadianceRenderTarget->ClearColor = FLinearColor::Black;
 		RadianceRenderTarget->bAutoGenerateMips = false;
+		RadianceRenderTarget->SRGB = false;
+		RadianceRenderTarget->TargetGamma = 1.0f;
 		RadianceRenderTarget->InitCustomFormat(TargetWidth, TargetHeight, DesiredPixelFormat, true);
 		RadianceRenderTarget->UpdateResourceImmediate(true);
 	}
@@ -369,6 +468,8 @@ void ARadianceCaptureActor::EnsureRenderTarget()
 			Target->RenderTargetFormat = RenderTargetFormat;
 			Target->ClearColor = FLinearColor::Black;
 			Target->bAutoGenerateMips = false;
+			Target->SRGB = false;
+			Target->TargetGamma = 1.0f;
 			Target->InitCustomFormat(TargetWidth, TargetHeight, PixelFormat, true);
 			Target->UpdateResourceImmediate(true);
 		}
@@ -384,6 +485,8 @@ void ARadianceCaptureActor::EnsureRenderTarget()
 	CaptureComponent->CaptureSource = SCS_SceneColorHDRNoAlpha;
 	CaptureComponent->PostProcessBlendWeight = 0.0f;
 	CaptureComponent->ShowFlags.SetPostProcessing(false);
+		CaptureComponent->ShowFlags.SetTonemapper(false);
+		CaptureComponent->ShowFlags.SetEyeAdaptation(false);
 	CaptureComponent->bAlwaysPersistRenderingState = false;
 	CaptureComponent->bCaptureEveryFrame = false;
 	CaptureComponent->bCaptureOnMovement = false;
@@ -454,9 +557,12 @@ void ARadianceCaptureActor::UpdatePlayerCameraView()
 
 	if (DynamicPlayerViewMaterial)
 	{
+		float DebugMin = 0.0f;
+		float DebugMax = 1.0f;
+		GetDebugDisplayRange(DebugMin, DebugMax);
 		DynamicPlayerViewMaterial->SetTextureParameterValue(PlayerViewTextureParameterName, GetDebugRenderTarget());
-		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("DisplayRadianceMin"), DisplayRadianceMin);
-		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("DisplayRadianceMax"), DisplayRadianceMax);
+		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("DisplayRadianceMin"), DebugMin);
+		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("DisplayRadianceMax"), DebugMax);
 		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("InvertDebugDisplay"), bInvertDebugDisplay ? 1.0f : 0.0f);
 
 		if (PlayerViewPostProcessComponent)

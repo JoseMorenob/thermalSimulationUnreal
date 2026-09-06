@@ -42,6 +42,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface")
 	void SetEmissivity(float InEmissivity);
 
+	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface|Directional Emissivity")
+	void SetComplexRefractiveIndex(float InRealPart, float InImaginaryPart);
+
 	UFUNCTION(BlueprintCallable, Category = "IR Thermal Environment")
 	void SetAtmosphericExtinctionCoefficient(float InCoefficient);
 
@@ -91,20 +94,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface", meta = (ClampMin = "0"))
 	int32 MaterialId = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Directional Emissivity")
-	bool bUseDirectionalEmissivity = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Directional Emissivity", meta = (ClampMin = "0.0"))
+	float ComplexRefractiveIndexReal = 1.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Directional Emissivity", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float DirectionalEmissivityFront = 0.95f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Directional Emissivity", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float DirectionalEmissivityGrazing = 0.35f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Directional Emissivity", meta = (ClampMin = "0.1", UIMin = "0.1"))
-	float DirectionalAngularFalloffPower = 2.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Debug Display", meta = (ClampMin = "0.0001", UIMin = "0.0001"))
-	float RadianceNormalizationMax = 1000.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Directional Emissivity", meta = (ClampMin = "0.0"))
+	float ComplexRefractiveIndexImaginary = 0.0f;
 
 private:
 	UStaticMeshComponent* ResolveTargetMesh() const;
@@ -113,6 +107,8 @@ private:
 
 	float AirTemperatureK = 293.15f;
 	float EffectiveSkyTemperatureK = 240.0f;
+	float SkyHorizonTemperatureK = 275.0f;
+	float SkyZenithTemperatureK = 230.0f;
 	float AtmosphericExtinctionCoefficient = 0.015f;
 	float BandMinMicrons = 8.0f;
 	float BandMaxMicrons = 12.0f;

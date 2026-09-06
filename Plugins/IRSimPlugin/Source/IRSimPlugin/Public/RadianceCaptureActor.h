@@ -43,6 +43,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Radiance")
 	void CaptureRadianceFrame();
 
+	UFUNCTION(BlueprintCallable, Category = "Radiance|Buffers")
+	void SetAuxiliaryBufferMaterials(
+		UMaterialInterface* InTemperatureMaterial,
+		UMaterialInterface* InEmissivityMaterial,
+		UMaterialInterface* InMaterialIdMaterial);
+
 	UFUNCTION(BlueprintPure, Category = "Radiance")
 	UTextureRenderTarget2D* GetRadianceRenderTarget() const;
 
@@ -133,6 +139,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display")
 	bool bInvertDebugDisplay = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display", meta = (ClampMin = "1.0", UIMin = "1.0"))
+	float DebugDepthMaxCentimeters = 5000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display", meta = (ClampMin = "1.0", UIMin = "1.0"))
+	float DebugMaterialIdMax = 10.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display")
 	EIRDebugBuffer DebugBuffer = EIRDebugBuffer::Radiance;
 
@@ -140,10 +152,11 @@ private:
 	void EnsureRenderTarget();
 	void CaptureAuxiliaryBuffers();
 	void CaptureSceneToTarget(UTextureRenderTarget2D* Target, ESceneCaptureSource Source);
-	void CaptureThermalMaterialToTarget(UTextureRenderTarget2D* Target, UMaterialInterface* BufferMaterial);
+	void CaptureThermalMaterialToTarget(UTextureRenderTarget2D* Target, UMaterialInterface* BufferMaterial, ESceneCaptureSource Source = SCS_SceneColorHDRNoAlpha);
 	void SyncToPlayerCamera();
 	void UpdatePlayerCameraView();
 	UTextureRenderTarget2D* GetDebugRenderTarget() const;
+	void GetDebugDisplayRange(float& OutMin, float& OutMax) const;
 	void ClearPlayerCameraView();
 	UCameraComponent* FindPlayerCameraComponent() const;
 

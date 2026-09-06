@@ -18,6 +18,8 @@ public:
 
 	float GetAirTemperatureK() const { return AirTemperatureK; }
 	float GetEffectiveSkyTemperatureK() const { return EffectiveSkyTemperatureK; }
+	float GetSkyHorizonTemperatureK() const { return SkyHorizonTemperatureK; }
+	float GetSkyZenithTemperatureK() const { return SkyZenithTemperatureK; }
 	float GetSolarIrradianceWm2() const { return SolarIrradianceWm2; }
 	bool IsThermalDynamicsEnabled() const { return bEnableThermalDynamics; }
 	float GetAtmosphericExtinctionCoefficient() const { return AtmosphericExtinctionCoefficient; }
@@ -31,6 +33,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Environment")
 	float EffectiveSkyTemperatureK = 240.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Environment|Sky Reflection", meta = (ClampMin = "0.0"))
+	float SkyHorizonTemperatureK = 275.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Environment|Sky Reflection", meta = (ClampMin = "0.0"))
+	float SkyZenithTemperatureK = 230.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Environment")
 	bool bEnableThermalDynamics = false;
