@@ -27,6 +27,11 @@ Plugins/IRSimPlugin/Content/Materials/*PreRepair*.uasset
 Plugins/IRSimPlugin/Content/Materials/*RepairedAttempt*.uasset
 Content/Materials/M_IR_PhysicalRadiance_Test.uasset
 
+# Importaciones locales sin referencias desde los mapas versionados y una
+# copia redundante del núcleo (la versión enlazada es IRCore/Lib/Win64).
+Content/IndustrialPipesM/
+Plugins/IRSimPlugin/Source/ThirdParty/IRCore.zip
+
 # OS
 Thumbs.db
 Desktop.ini

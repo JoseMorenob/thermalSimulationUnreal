@@ -10,46 +10,25 @@ struct SpectralBand {
     int integration_samples;
 };
 
-struct ThermalBalanceInputs {
-    double object_temperature_k;
-    double solar_irradiance_w_m2;
-    double solar_absorptivity;
-    double sun_exposure;
-    double convection_coefficient_w_m2_k;
-    double air_temperature_k;
-    double sky_temperature_k;
-    double emissivity;
-    double thermal_capacity_j_m2_k;
-    double delta_time_s;
-};
-
 double compute_planck_spectral_radiance(double temperature_k, double wavelength_um) noexcept;
 
 double integrate_band_radiance(
     double temperature_k,
-    double emissivity,
     const SpectralBand& band) noexcept;
 
 double compute_atmospheric_transmittance(double extinction_coefficient, double distance_m) noexcept;
 
-double compute_surface_band_radiance(
-    double object_temperature_k,
-    double background_temperature_k,
-    double emissivity,
-    const SpectralBand& band) noexcept;
+// Unpolarized Fresnel reflectance for an air-to-conductor interface.
+// Formula: Pharr, Jakob and Humphreys (2023), Physically Based Rendering,
+// 4th ed., section "Specular Reflection and Transmission".
+double compute_fresnel_conductor_reflectance(
+    double cos_theta_i,
+    double refractive_index_real,
+    double refractive_index_imaginary) noexcept;
 
 double compute_sensor_band_radiance(
     double surface_band_radiance,
     double air_band_radiance,
     double atmospheric_transmittance) noexcept;
-
-double compute_thermal_temperature_step(const ThermalBalanceInputs& inputs) noexcept;
-
-float radiance_to_intensity(double radiance, double max_radiance) noexcept;
-
-float radiance_to_windowed_intensity(
-    double radiance,
-    double min_radiance,
-    double max_radiance) noexcept;
 
 } // namespace ir

@@ -9,7 +9,7 @@ constexpr double STEFAN_BOLTZMANN = 5.670374419e-8;
 
 namespace band {
 constexpr double LWIR_LOW_UM = 8.0;
-constexpr double LWIR_HIGH_UM = 12.0;
+constexpr double LWIR_HIGH_UM = 14.0;
 } // namespace band
 
 } // namespace ir

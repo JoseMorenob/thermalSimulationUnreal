@@ -1,7 +1,7 @@
 {
     "FileVersion": 3,
-    "Version": 1,
-    "VersionName": "0.1.0",
+    "Version": 10000,
+    "VersionName": "1.0.0",
     "FriendlyName": "IR Simulator Plugin",
     "Description": "Physics-based infrared camera simulator. Wraps ir_core library for UE5 integration. TFM — Jose Moreno Barbero, U-tad CGRVS.",
     "Category": "Rendering",
@@ -11,7 +11,7 @@
     "MarketplaceURL": "",
     "SupportURL": "",
     "CanContainContent": true,
-    "IsBetaVersion": true,
+    "IsBetaVersion": false,
     "IsExperimentalVersion": false,
     "Installed": false,
     "Modules": [

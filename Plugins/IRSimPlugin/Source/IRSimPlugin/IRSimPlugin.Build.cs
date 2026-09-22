@@ -33,7 +33,8 @@ public class IRSimPlugin : ModuleRules
             {
                 "Core",
                 "CoreUObject",
-                "Engine"
+                "Engine",
+                "UMG"
             });
 
         PrivateDependencyModuleNames.AddRange(
@@ -41,7 +42,9 @@ public class IRSimPlugin : ModuleRules
             {
                 "InputCore",
                 "RenderCore",
-                "RHI"
+                "RHI",
+                "Slate",
+                "SlateCore"
             });
 
         if (Target.bBuildEditor)
@@ -49,7 +52,8 @@ public class IRSimPlugin : ModuleRules
             PrivateDependencyModuleNames.AddRange(
                 new[]
                 {
-                    "UnrealEd"
+                    "UnrealEd",
+                    "PropertyEditor"
                 });
         }
     }

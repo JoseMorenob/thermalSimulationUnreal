@@ -2,10 +2,12 @@
 
 #include "RadianceCaptureActor.h"
 
+#include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Components/InputComponent.h"
 #include "Components/PostProcessComponent.h"
-#include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
@@ -14,7 +16,10 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "IRThermalSurfaceComponent.h"
+#include "IRInternalSceneCaptureComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "RenderingThread.h"
 
@@ -25,7 +30,7 @@ ARadianceCaptureActor::ARadianceCaptureActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	CaptureComponent = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("RadianceCapture"));
+	CaptureComponent = CreateDefaultSubobject<UIRInternalSceneCaptureComponent>(TEXT("RadianceCapture"));
 	SetRootComponent(CaptureComponent);
 
 	PlayerViewPostProcessComponent = CreateDefaultSubobject<UPostProcessComponent>(TEXT("PlayerViewPostProcess"));
@@ -34,7 +39,7 @@ ARadianceCaptureActor::ARadianceCaptureActor()
 	PlayerViewPostProcessComponent->bEnabled = false;
 	PlayerViewPostProcessComponent->BlendWeight = 1.0f;
 
-	AuxiliaryCaptureComponent = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("AuxiliaryCapture"));
+	AuxiliaryCaptureComponent = CreateDefaultSubobject<UIRInternalSceneCaptureComponent>(TEXT("AuxiliaryCapture"));
 	AuxiliaryCaptureComponent->SetupAttachment(CaptureComponent);
 	AuxiliaryCaptureComponent->bCaptureEveryFrame = false;
 	AuxiliaryCaptureComponent->bCaptureOnMovement = false;
@@ -56,12 +61,36 @@ void ARadianceCaptureActor::OnConstruction(const FTransform& Transform)
 void ARadianceCaptureActor::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Los mapas creados antes de ampliar la banda LWIR conservan el antiguo
+	// maximo de visualizacion (1.0). No afecta a la radiancia fisica, pero la
+	// saturaba por completo al pasar a 8--14 um.
+	if (FMath::IsNearlyEqual(DisplayRadianceMax, 1.0f))
+	{
+		DisplayRadianceMax = 130.0f;
+	}
+
+	// Permite medir la pasada de radiancia de forma aislada sin modificar el
+	// mapa ni la configuracion persistente de sus buffers auxiliares.
+	if (FParse::Param(FCommandLine::Get(), TEXT("IRRadianceOnly")))
+	{
+		bCaptureAuxiliaryBuffers = false;
+		UE_LOG(LogTemp, Display, TEXT("IR benchmark: solo se captura el buffer de radiancia."));
+	}
+
 	RefreshCapturePipeline();
+	ConfigureCommandLineBenchmark();
+	BindDebugBufferHotkeys();
 }
 
 void ARadianceCaptureActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ClearPlayerCameraView();
+	if (bDebugBufferHotkeysBound)
+	{
+		DisableInput(UGameplayStatics::GetPlayerController(this, 0));
+		bDebugBufferHotkeysBound = false;
+	}
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -69,8 +98,14 @@ void ARadianceCaptureActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ARadianceCaptureActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	TickCommandLineBenchmark(DeltaSeconds);
 
-	if (bFollowPlayerCamera)
+	if (!bEnableRadianceCapture)
+	{
+		return;
+	}
+
+	if (bFollowPlayerCamera || FollowCameraActor)
 	{
 		SyncToPlayerCamera();
 	}
@@ -108,11 +143,177 @@ void ARadianceCaptureActor::CaptureRadianceFrame()
 		}
 
 
+		if (RadianceRenderTarget)
+		{
+			OnRadianceFrameCaptured.Broadcast(RadianceRenderTarget);
+		}
+
 		if (bHadPlayerViewPostProcess)
 		{
 			UpdatePlayerCameraView();
 		}
 	}
+}
+
+void ARadianceCaptureActor::ConfigureCommandLineBenchmark()
+{
+	FString Mode;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("IRBenchmarkMode="), Mode))
+	{
+		return;
+	}
+
+	Mode = Mode.ToLower();
+	if (Mode == TEXT("base"))
+	{
+		bEnableRadianceCapture = false;
+		bCaptureAuxiliaryBuffers = false;
+		bShowRenderTargetOnPlayerCamera = false;
+	}
+	else if (Mode == TEXT("radiance"))
+	{
+		bEnableRadianceCapture = true;
+		bCaptureAuxiliaryBuffers = false;
+		bShowRenderTargetOnPlayerCamera = false;
+	}
+	else if (Mode == TEXT("visible"))
+	{
+		bEnableRadianceCapture = true;
+		bCaptureAuxiliaryBuffers = false;
+		bShowRenderTargetOnPlayerCamera = true;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("IR benchmark mode '%s' is invalid. Use base, radiance or visible."), *Mode);
+		return;
+	}
+
+	BenchmarkWarmupSeconds = 10.0f;
+	BenchmarkCaptureSeconds = 30.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("IRBenchmarkWarmup="), BenchmarkWarmupSeconds);
+	FParse::Value(FCommandLine::Get(), TEXT("IRBenchmarkSeconds="), BenchmarkCaptureSeconds);
+	if (BenchmarkWarmupSeconds < 0.0f || BenchmarkCaptureSeconds <= 0.0f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("IR benchmark durations must be non-negative warmup and positive capture seconds."));
+		return;
+	}
+
+	BenchmarkCsvLabel = FString::Printf(TEXT("ir_%s"), *Mode);
+	BenchmarkCaptureState = EBenchmarkCaptureState::Warmup;
+	BenchmarkElapsedSeconds = 0.0f;
+	UE_LOG(LogTemp, Display, TEXT("IR benchmark configured: mode=%s warmup=%.1fs capture=%.1fs."),
+		*Mode, BenchmarkWarmupSeconds, BenchmarkCaptureSeconds);
+}
+
+void ARadianceCaptureActor::TickCommandLineBenchmark(float DeltaSeconds)
+{
+	if (BenchmarkCaptureState == EBenchmarkCaptureState::Disabled || !GetWorld() || !GEngine)
+	{
+		return;
+	}
+
+	BenchmarkElapsedSeconds += DeltaSeconds;
+	if (BenchmarkCaptureState == EBenchmarkCaptureState::Warmup && BenchmarkElapsedSeconds >= BenchmarkWarmupSeconds)
+	{
+		// CSV is the Unreal-owned raw evidence.  The launcher script copies the
+		// newly created file to a deterministic result directory.
+		GEngine->Exec(GetWorld(), TEXT("csvprofile start"));
+		BenchmarkCaptureState = EBenchmarkCaptureState::Capturing;
+		BenchmarkElapsedSeconds = 0.0f;
+		UE_LOG(LogTemp, Display, TEXT("IR benchmark CSV capture started (%s)."), *BenchmarkCsvLabel);
+	}
+	else if (BenchmarkCaptureState == EBenchmarkCaptureState::Capturing && BenchmarkElapsedSeconds >= BenchmarkCaptureSeconds)
+	{
+		GEngine->Exec(GetWorld(), TEXT("csvprofile stop"));
+		BenchmarkCaptureState = EBenchmarkCaptureState::Finishing;
+		BenchmarkElapsedSeconds = 0.0f;
+		UE_LOG(LogTemp, Display, TEXT("IR benchmark CSV capture stopped (%s)."), *BenchmarkCsvLabel);
+	}
+	else if (BenchmarkCaptureState == EBenchmarkCaptureState::Finishing && BenchmarkElapsedSeconds >= 3.0f)
+	{
+		BenchmarkCaptureState = EBenchmarkCaptureState::Disabled;
+		GEngine->Exec(GetWorld(), TEXT("quit"));
+	}
+}
+
+void ARadianceCaptureActor::SetDebugBuffer(EIRDebugBuffer InDebugBuffer)
+{
+	DebugBuffer = InDebugBuffer;
+	// Bind the selected target and its appropriate display range immediately;
+	// the source targets remain unmodified raw measurements.
+	UpdatePlayerCameraView();
+}
+
+EIRDebugBuffer ARadianceCaptureActor::GetDebugBuffer() const
+{
+	return DebugBuffer;
+}
+
+void ARadianceCaptureActor::SetDisplayRadianceRange(float InMin, float InMax)
+{
+	DisplayRadianceMin = FMath::Max(InMin, 0.0f);
+	DisplayRadianceMax = FMath::Max(InMax, DisplayRadianceMin + KINDA_SMALL_NUMBER);
+	UpdatePlayerCameraView();
+}
+
+void ARadianceCaptureActor::BindDebugBufferHotkeys()
+{
+	if (!bEnableDebugBufferHotkeys || bDebugBufferHotkeysBound || !GetWorld() || !GetWorld()->IsGameWorld())
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	if (!PlayerController)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("IR debug buffer hotkeys were not bound: player controller 0 is unavailable."));
+		return;
+	}
+
+	EnableInput(PlayerController);
+	if (!InputComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("IR debug buffer hotkeys were not bound: input component is unavailable."));
+		return;
+	}
+
+	InputComponent->BindKey(EKeys::One, IE_Pressed, this, &ARadianceCaptureActor::SelectRadianceDebugBuffer);
+	InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ARadianceCaptureActor::SelectTemperatureDebugBuffer);
+	InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ARadianceCaptureActor::SelectEmissivityDebugBuffer);
+	InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ARadianceCaptureActor::SelectDepthDebugBuffer);
+	InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ARadianceCaptureActor::SelectNormalsDebugBuffer);
+	InputComponent->BindKey(EKeys::Six, IE_Pressed, this, &ARadianceCaptureActor::SelectMaterialIdDebugBuffer);
+	bDebugBufferHotkeysBound = true;
+}
+
+void ARadianceCaptureActor::SelectRadianceDebugBuffer()
+{
+	SetDebugBuffer(EIRDebugBuffer::Radiance);
+}
+
+void ARadianceCaptureActor::SelectTemperatureDebugBuffer()
+{
+	SetDebugBuffer(EIRDebugBuffer::Temperature);
+}
+
+void ARadianceCaptureActor::SelectEmissivityDebugBuffer()
+{
+	SetDebugBuffer(EIRDebugBuffer::Emissivity);
+}
+
+void ARadianceCaptureActor::SelectDepthDebugBuffer()
+{
+	SetDebugBuffer(EIRDebugBuffer::Depth);
+}
+
+void ARadianceCaptureActor::SelectNormalsDebugBuffer()
+{
+	SetDebugBuffer(EIRDebugBuffer::Normals);
+}
+
+void ARadianceCaptureActor::SelectMaterialIdDebugBuffer()
+{
+	SetDebugBuffer(EIRDebugBuffer::MaterialId);
 }
 
 void ARadianceCaptureActor::SetAuxiliaryBufferMaterials(
@@ -426,7 +627,6 @@ void ARadianceCaptureActor::EnsureRenderTarget()
 			nullptr,
 			TEXT("/IRSimPlugin/Materials/Buffers/M_IR_Output_MaterialId.M_IR_Output_MaterialId"));
 	}
-
 	// SceneCapture2D escribe un color de escena float4 y RGBA16F conserva la captura
 	// fisica mientras el canal R mantiene la radiancia del contrato de salida
 	const ETextureRenderTargetFormat DesiredRenderTargetFormat = RTF_RGBA16f;
@@ -494,22 +694,32 @@ void ARadianceCaptureActor::EnsureRenderTarget()
 
 void ARadianceCaptureActor::SyncToPlayerCamera()
 {
-	// La camara del jugador solo se usa para facilitar la inspeccion visual
-	UCameraComponent* PlayerCameraComponent = FindPlayerCameraComponent();
-	if (PlayerCameraComponent)
+	if (FollowCameraActor)
 	{
 		SetActorLocationAndRotation(
-			PlayerCameraComponent->GetComponentLocation(),
-			PlayerCameraComponent->GetComponentRotation());
+			FollowCameraActor->GetActorLocation(),
+			FollowCameraActor->GetActorRotation());
 		return;
 	}
 
+	// PlayerCameraManager resuelve la vista activa. Esto incluye una
+	// CineCameraActor tomada por Level Sequencer, mientras que la camara del
+	// Pawn solo representa la vista por defecto fuera de una secuencia.
 	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
 	if (PlayerController && PlayerController->PlayerCameraManager)
 	{
 		SetActorLocationAndRotation(
 			PlayerController->PlayerCameraManager->GetCameraLocation(),
 			PlayerController->PlayerCameraManager->GetCameraRotation());
+		return;
+	}
+
+	UCameraComponent* PlayerCameraComponent = FindPlayerCameraComponent();
+	if (PlayerCameraComponent)
+	{
+		SetActorLocationAndRotation(
+			PlayerCameraComponent->GetComponentLocation(),
+			PlayerCameraComponent->GetComponentRotation());
 	}
 }
 
@@ -563,7 +773,6 @@ void ARadianceCaptureActor::UpdatePlayerCameraView()
 		DynamicPlayerViewMaterial->SetTextureParameterValue(PlayerViewTextureParameterName, GetDebugRenderTarget());
 		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("DisplayRadianceMin"), DebugMin);
 		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("DisplayRadianceMax"), DebugMax);
-		DynamicPlayerViewMaterial->SetScalarParameterValue(TEXT("InvertDebugDisplay"), bInvertDebugDisplay ? 1.0f : 0.0f);
 
 		if (PlayerViewPostProcessComponent)
 		{

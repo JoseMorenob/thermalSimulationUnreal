@@ -2,7 +2,7 @@
 
 // Estas pruebas se compilan solo en una compilacion de desarrollo del editor.
 // Verifican los cinco ensayos de validación descritos en la memoria del TFM.
-#if WITH_DEV_AUTOMATION_TESTS
+#if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
 
@@ -299,8 +299,8 @@ bool FIRRadianciaCpuGpuTest::RunTest(const FString&)
 
     for (const float temperatura : {280.0f, 300.0f, 340.0f})
     {
-        // Banda LWIR 8--12 um, con los mismos 40 pasos que emplea el material.
-        const float referencia_cpu = irsim::core::ComputeBandRadiance(temperatura, 8.0f, 12.0f, 40);
+        // Banda LWIR 8--14 um, con los mismos 40 pasos que emplea el material.
+        const float referencia_cpu = irsim::core::ComputeBandRadiance(temperatura, 8.0f, 14.0f, 40);
         escena.superficie->SetTemperatureKelvin(temperatura);
         escena.PrepararYCapturar();
         ComprobarContratoDeRadiancia(*this, escena);
@@ -342,7 +342,7 @@ bool FIRAtmosferaCpuGpuTest::RunTest(const FString&)
     temperatura_aire->SetPropertyValue_InContainer(entorno, 0.0f);
     escena.superficie->ApplySceneEnvironment(entorno);
     escena.superficie->SetTemperatureKelvin(340.0f);
-    const float radiancia_origen = irsim::core::ComputeBandRadiance(340.0f, 8.0f, 12.0f, 40);
+    const float radiancia_origen = irsim::core::ComputeBandRadiance(340.0f, 8.0f, 14.0f, 40);
 
     for (const float k : {0.0f, 0.001f, 0.015f})
     {
@@ -438,8 +438,8 @@ bool FIRAtmosferaEmisoraTest::RunTest(const FString&)
 
     constexpr float distancia_m = 50.0f;
     const float tau = irsim::core::ComputeAtmosphericTransmittance(0.015f, distancia_m);
-    const float radiancia_superficie = irsim::core::ComputeBandRadiance(340.0f, 8.0f, 12.0f, 40);
-    const float radiancia_aire = irsim::core::ComputeBandRadiance(280.0f, 8.0f, 12.0f, 40);
+    const float radiancia_superficie = irsim::core::ComputeBandRadiance(340.0f, 8.0f, 14.0f, 40);
+    const float radiancia_aire = irsim::core::ComputeBandRadiance(280.0f, 8.0f, 14.0f, 40);
     const float referencia = irsim::core::ComputeSensorBandRadiance(
         radiancia_superficie, radiancia_aire, tau);
     const float sin_radiancia_camino = tau * radiancia_superficie;
@@ -577,7 +577,7 @@ bool FIRFresnelAngularTest::RunTest(const FString&)
         }
     }
 
-    // Para este material, Fresnel aumenta al pasar a visión rasante; por tanto,
+    // Para este material, Fresnel aumenta al pasar a visión rasante por tanto,
     // la emisividad direccional debe reducirse. Esta comparación detecta que el
     // material ignorase CameraPosition o usase un valor escalar fijo.
     TestTrue(TEXT("La emisividad direccional disminuye al aumentar el ángulo"),

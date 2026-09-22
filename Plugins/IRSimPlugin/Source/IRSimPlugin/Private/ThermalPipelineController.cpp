@@ -13,32 +13,6 @@
 AThermalPipelineController::AThermalPipelineController()
 {
 	PrimaryActorTick.bCanEverTick = false;
-	PrimaryActorTick.bCanEverTick = true;
-}
-
-void AThermalPipelineController::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-	if (!SceneEnvironmentActor || !GetWorld())
-	{
-		return;
-	}
-
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
-	{
-		TInlineComponentArray<UIRThermalSurfaceComponent*> ThermalSurfaces(*It);
-		for (UIRThermalSurfaceComponent* ThermalSurface : ThermalSurfaces)
-		{
-			ThermalSurface->AdvanceThermalState(
-				DeltaSeconds,
-				SceneEnvironmentActor->IsThermalDynamicsEnabled(),
-				SceneEnvironmentActor->GetSolarIrradianceWm2(),
-				SceneEnvironmentActor->GetAirTemperatureK(),
-				SceneEnvironmentActor->GetEffectiveSkyTemperatureK());
-		}
-	}
-
-	ApplyThermalMaterialToActors();
 }
 
 void AThermalPipelineController::OnConstruction(const FTransform& Transform)
@@ -57,7 +31,6 @@ void AThermalPipelineController::RefreshPipeline()
 {
 	// Primero se propaga el contexto y despues se actualizan materiales y captura
 	ApplySceneEnvironmentToActors();
-	UpdateThermalActorsSensorLocation();
 	ApplyThermalMaterialToActors();
 	RefreshCaptureActor();
 
@@ -70,7 +43,6 @@ void AThermalPipelineController::RefreshPipeline()
 void AThermalPipelineController::CaptureRadianceNow()
 {
 	ApplySceneEnvironmentToActors();
-	UpdateThermalActorsSensorLocation();
 
 	if (RadianceCaptureActor)
 	{
@@ -96,29 +68,8 @@ void AThermalPipelineController::ApplySceneEnvironmentToActors()
 	}
 }
 
-void AThermalPipelineController::UpdateThermalActorsSensorLocation()
-{
-	// La distancia atmosferica se mide desde el sensor virtual y no desde el editor
-	if (!RadianceCaptureActor || !GetWorld())
-	{
-		return;
-	}
-
-	const FVector RadianceSensorLocation = RadianceCaptureActor->GetSensorWorldLocation();
-
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
-	{
-		TInlineComponentArray<UIRThermalSurfaceComponent*> ThermalSurfaces(*It);
-		for (UIRThermalSurfaceComponent* ThermalSurface : ThermalSurfaces)
-		{
-			ThermalSurface->SetRadianceSensorWorldLocation(RadianceSensorLocation);
-		}
-	}
-}
-
 void AThermalPipelineController::ApplyThermalMaterialToActors()
 {
-	// Se fuerza el material fisico para que la captura no dependa de la vista debug
 	if (!bAutoAssignMaterialToThermalActors || !DefaultThermalMaterial || !GetWorld())
 	{
 		return;
@@ -130,7 +81,6 @@ void AThermalPipelineController::ApplyThermalMaterialToActors()
 		for (UIRThermalSurfaceComponent* ThermalSurface : ThermalSurfaces)
 		{
 			ThermalSurface->SetDebugMaterial(DefaultThermalMaterial);
-			ThermalSurface->RefreshThermalSurface();
 		}
 	}
 }

@@ -132,7 +132,7 @@ bool AIRRadianceValidationActor::ResolveTarget(FVector& OutWorldLocation, float&
 		const float DistanceMeters = FVector::Distance(
 			OutWorldLocation,
 			RadianceCaptureActor->GetSensorWorldLocation()) * 0.01f;
-		OutExpectedRadiance = TargetThermalSurface->GetCurrentSensorRadiance(DistanceMeters);
+		OutExpectedRadiance = TargetThermalSurface->GetCurrentBlackbodySensorRadiance(DistanceMeters);
 		return true;
 	}
 

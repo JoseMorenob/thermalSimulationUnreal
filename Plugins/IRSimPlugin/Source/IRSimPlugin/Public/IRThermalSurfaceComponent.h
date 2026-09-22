@@ -24,9 +24,6 @@ public:
 	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
 
-	void AdvanceThermalState(float DeltaTimeSeconds, bool bSceneDynamicsEnabled,
-		float SolarIrradianceWm2, float AirTemperatureK, float SkyTemperatureK);
-
 	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface")
 	void RefreshThermalSurface();
 
@@ -34,15 +31,15 @@ public:
 	void ApplySceneEnvironment(const AIRSceneEnvironmentActor* SceneEnvironment);
 
 	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface")
-	void SetRadianceSensorWorldLocation(const FVector& WorldLocation);
-
-	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface")
 	void SetTemperatureKelvin(float InTemperatureK);
 
 	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface")
-	void SetEmissivity(float InEmissivity);
+	void SetTargetMesh(UStaticMeshComponent* InTargetMesh);
 
-	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface|Directional Emissivity")
+	UFUNCTION(BlueprintPure, Category = "IR Thermal Surface")
+	float GetTemperatureKelvin() const { return TemperatureK; }
+
+	UFUNCTION(BlueprintCallable, Category = "IR Thermal Surface|Optical Parameters")
 	void SetComplexRefractiveIndex(float InRealPart, float InImaginaryPart);
 
 	UFUNCTION(BlueprintCallable, Category = "IR Thermal Environment")
@@ -55,13 +52,13 @@ public:
 	UStaticMeshComponent* GetTargetMesh() const { return ResolveTargetMesh(); }
 
 	UFUNCTION(BlueprintPure, Category = "IR Thermal Surface")
-	float GetCurrentSurfaceBandRadiance() const;
+	float GetCurrentBlackbodyBandRadiance() const;
 
 	UFUNCTION(BlueprintPure, Category = "IR Thermal Surface")
 	float GetCurrentAirBandRadiance() const;
 
 	UFUNCTION(BlueprintPure, Category = "IR Thermal Surface")
-	float GetCurrentSensorRadiance(float DistanceMeters) const;
+	float GetCurrentBlackbodySensorRadiance(float DistanceMeters) const;
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface")
@@ -73,50 +70,28 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface", meta = (ClampMin = "0.0"))
 	float TemperatureK = 300.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics")
-	bool bEnableThermalDynamics = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics", meta = (ClampMin = "0.0"))
-	float ThermalCapacityJm2K = 100000.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float SolarAbsorptivity = 0.7f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float SunExposure = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Dynamics", meta = (ClampMin = "0.0"))
-	float ConvectionCoefficientWm2K = 10.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float Emissivity = 0.95f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface", meta = (ClampMin = "0"))
 	int32 MaterialId = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Directional Emissivity", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Optical Parameters", meta = (ClampMin = "0.0"))
 	float ComplexRefractiveIndexReal = 1.5f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Directional Emissivity", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "IR Thermal Surface|Optical Parameters", meta = (ClampMin = "0.0"))
 	float ComplexRefractiveIndexImaginary = 0.0f;
 
 private:
 	UStaticMeshComponent* ResolveTargetMesh() const;
-	float GetSensorDistanceMeters() const;
 	void PushThermalDataToPrimitive();
 
 	float AirTemperatureK = 293.15f;
-	float EffectiveSkyTemperatureK = 240.0f;
 	float SkyHorizonTemperatureK = 275.0f;
 	float SkyZenithTemperatureK = 230.0f;
 	float AtmosphericExtinctionCoefficient = 0.015f;
 	float BandMinMicrons = 8.0f;
-	float BandMaxMicrons = 12.0f;
+	float BandMaxMicrons = 14.0f;
 	int32 SpectralIntegrationSamples = 40;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DynamicDebugMaterial;
 
-	bool bHasRadianceSensorWorldLocation = false;
-	FVector RadianceSensorWorldLocation = FVector::ZeroVector;
 };

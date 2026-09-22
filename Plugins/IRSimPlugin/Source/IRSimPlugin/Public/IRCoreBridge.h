@@ -6,46 +6,22 @@
 
 namespace irsim::core
 {
-	float ComputePlanckSpectralRadiance(float TemperatureK, float WavelengthMicrons);
-
 	float ComputeBandRadiance(
 		float TemperatureK,
-		float Emissivity,
 		float BandMinMicrons,
 		float BandMaxMicrons,
 		int SampleCount);
 
 	float ComputeAtmosphericTransmittance(float ExtinctionCoefficient, float DistanceMeters);
 
-	float ComputeSurfaceBandRadiance(
-		float ObjectTemperatureK,
-		float BackgroundTemperatureK,
-		float Emissivity,
-		float BandMinMicrons,
-		float BandMaxMicrons,
-		int SampleCount);
+	float ComputeFresnelConductorReflectance(
+		float CosThetaI,
+		float RefractiveIndexReal,
+		float RefractiveIndexImaginary);
 
 	float ComputeSensorBandRadiance(
 		float SurfaceRadiance,
 		float AirRadiance,
 		float AtmosphericTransmittance);
 
-	float ComputeThermalTemperatureStep(
-		float ObjectTemperatureK,
-		float SolarIrradianceWm2,
-		float SolarAbsorptivity,
-		float SunExposure,
-		float ConvectionCoefficientWm2K,
-		float AirTemperatureK,
-		float SkyTemperatureK,
-		float Emissivity,
-		float ThermalCapacityJm2K,
-		float DeltaTimeSeconds);
-
-	float RadianceToIntensity(float Radiance, float MaxRadiance);
-
-	float RadianceToWindowedIntensity(
-		float Radiance,
-		float MinRadiance,
-		float MaxRadiance);
 }

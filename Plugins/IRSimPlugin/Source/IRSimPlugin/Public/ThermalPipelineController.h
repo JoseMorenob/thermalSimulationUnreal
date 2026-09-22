@@ -22,13 +22,16 @@ public:
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaSeconds) override;
-
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Thermal Pipeline")
 	void RefreshPipeline();
 
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Thermal Pipeline")
 	void CaptureRadianceNow();
+
+	// Permite a los componentes cargados posteriormente por World Partition
+	// recuperar el mismo material térmico que aplica el controlador.
+	UMaterialInterface* GetDefaultThermalMaterial() const { return DefaultThermalMaterial; }
+	bool ShouldAutoAssignThermalMaterial() const { return bAutoAssignMaterialToThermalActors; }
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Thermal Pipeline")
@@ -48,7 +51,6 @@ protected:
 
 private:
 	void ApplySceneEnvironmentToActors();
-	void UpdateThermalActorsSensorLocation();
 	void ApplyThermalMaterialToActors();
 	void RefreshCaptureActor();
 };

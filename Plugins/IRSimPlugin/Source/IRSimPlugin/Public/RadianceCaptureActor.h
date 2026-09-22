@@ -11,10 +11,19 @@
 class USceneCaptureComponent2D;
 class UCameraComponent;
 class UPostProcessComponent;
+class UIRInternalSceneCaptureComponent;
 class UTextureRenderTarget2D;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UIRThermalSurfaceComponent;
+class ACameraActor;
+
+// Evento de integracion: se emite cuando una captura fisica ya esta disponible.
+// El receptor debe tratar el target como entrada de solo lectura y crear su
+// propio target de salida para ruido, cuantizacion o efectos instrumentales.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnIRRadianceFrameCaptured,
+	UTextureRenderTarget2D*, PhysicalRadianceTarget);
 
 UENUM(BlueprintType)
 enum class EIRDebugBuffer : uint8
@@ -42,6 +51,35 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Radiance")
 	void CaptureRadianceFrame();
+
+	// Selects which captured buffer is presented by the optional player-camera
+	// debug material. It does not modify any physical render target.
+	UFUNCTION(BlueprintCallable, Category = "Radiance|Debug Display")
+	void SetDebugBuffer(EIRDebugBuffer InDebugBuffer);
+
+	UFUNCTION(BlueprintPure, Category = "Radiance|Debug Display")
+	EIRDebugBuffer GetDebugBuffer() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Radiance")
+	void SetRadianceCaptureEnabled(bool bEnabled) { bEnableRadianceCapture = bEnabled; }
+
+	UFUNCTION(BlueprintPure, Category = "Radiance")
+	bool IsRadianceCaptureEnabled() const { return bEnableRadianceCapture; }
+
+	UFUNCTION(BlueprintCallable, Category = "Radiance|Buffers")
+	void SetCaptureAuxiliaryBuffers(bool bEnabled) { bCaptureAuxiliaryBuffers = bEnabled; }
+
+	UFUNCTION(BlueprintCallable, Category = "Radiance|Debug Display")
+	void SetDisplayRadianceRange(float InMin, float InMax);
+
+	UFUNCTION(BlueprintPure, Category = "Radiance|Debug Display")
+	float GetDisplayRadianceMax() const { return DisplayRadianceMax; }
+
+	// Se emite una vez terminada cada captura. PhysicalRadianceTarget contiene
+	// radiancia LWIR lineal en RGBA16F, con sRGB=false y gamma=1. El canal R es
+	// la magnitud fisica W/(m2 sr); no modificar este target desde otro plugin.
+	UPROPERTY(BlueprintAssignable, Category = "Radiance|Integration")
+	FOnIRRadianceFrameCaptured OnRadianceFrameCaptured;
 
 	UFUNCTION(BlueprintCallable, Category = "Radiance|Buffers")
 	void SetAuxiliaryBufferMaterials(
@@ -77,7 +115,7 @@ public:
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Radiance")
-	TObjectPtr<USceneCaptureComponent2D> CaptureComponent;
+	TObjectPtr<UIRInternalSceneCaptureComponent> CaptureComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Radiance|Player View")
 	TObjectPtr<UPostProcessComponent> PlayerViewPostProcessComponent;
@@ -118,8 +156,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Buffers")
 	bool bCaptureAuxiliaryBuffers = true;
 
+	// Permite comparar el coste del pipeline IR con una ejecución base de la
+	// misma escena sin modificar los actores ni los materiales térmicos.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Benchmark")
+	bool bEnableRadianceCapture = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Player View")
 	bool bFollowPlayerCamera = false;
+
+	// Referencia explicita para secuencias cinematograficas. Si se asigna,
+	// prevalece sobre la camara del Pawn y el capture replica su transform.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Player View")
+	TObjectPtr<ACameraActor> FollowCameraActor;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Player View")
 	bool bShowRenderTargetOnPlayerCamera = false;
@@ -134,10 +182,7 @@ protected:
 	float DisplayRadianceMin = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display", meta = (ClampMin = "0.0001", UIMin = "0.0001"))
-	float DisplayRadianceMax = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display")
-	bool bInvertDebugDisplay = false;
+	float DisplayRadianceMax = 130.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display", meta = (ClampMin = "1.0", UIMin = "1.0"))
 	float DebugDepthMaxCentimeters = 5000.0f;
@@ -148,7 +193,38 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display")
 	EIRDebugBuffer DebugBuffer = EIRDebugBuffer::Radiance;
 
+	// Runtime shortcuts: 1 radiance, 2 temperature, 3 emissivity, 4 depth,
+	// 5 normals and 6 material ID. They are active only during Play.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Radiance|Debug Display")
+	bool bEnableDebugBufferHotkeys = true;
+
 private:
+	// The command-line benchmark mode is deliberately transient: it never
+	// changes the level asset.  See Scripts/run_ir_performance_benchmark.ps1.
+	void ConfigureCommandLineBenchmark();
+	void TickCommandLineBenchmark(float DeltaSeconds);
+
+	enum class EBenchmarkCaptureState : uint8
+	{
+		Disabled,
+		Warmup,
+		Capturing,
+		Finishing
+	};
+
+	EBenchmarkCaptureState BenchmarkCaptureState = EBenchmarkCaptureState::Disabled;
+	float BenchmarkElapsedSeconds = 0.0f;
+	float BenchmarkWarmupSeconds = 0.0f;
+	float BenchmarkCaptureSeconds = 0.0f;
+	FString BenchmarkCsvLabel;
+
+	void BindDebugBufferHotkeys();
+	void SelectRadianceDebugBuffer();
+	void SelectTemperatureDebugBuffer();
+	void SelectEmissivityDebugBuffer();
+	void SelectDepthDebugBuffer();
+	void SelectNormalsDebugBuffer();
+	void SelectMaterialIdDebugBuffer();
 	void EnsureRenderTarget();
 	void CaptureAuxiliaryBuffers();
 	void CaptureSceneToTarget(UTextureRenderTarget2D* Target, ESceneCaptureSource Source);
@@ -167,5 +243,7 @@ private:
 	TObjectPtr<UCameraComponent> BoundPlayerCameraComponent;
 
 	UPROPERTY(Transient)
-	TObjectPtr<USceneCaptureComponent2D> AuxiliaryCaptureComponent;
+	TObjectPtr<UIRInternalSceneCaptureComponent> AuxiliaryCaptureComponent;
+
+	bool bDebugBufferHotkeysBound = false;
 };
