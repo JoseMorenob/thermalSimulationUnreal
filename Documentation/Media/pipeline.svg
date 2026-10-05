@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="250" viewBox="0 0 1280 250" role="img" aria-labelledby="title desc">
+  <title id="title">IRSim image formation pipeline</title>
+  <desc id="desc">Scene inputs feed surface and atmosphere radiometry, producing a linear physical render target. A separate detector adapter produces the displayed image.</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="none" stroke="#ffb86b" stroke-width="1.4"/></marker></defs>
+  <rect width="1280" height="250" rx="16" fill="#0b1020"/>
+  <g fill="#151e32" stroke="#394864"><rect x="30" y="68" width="252" height="110" rx="10"/><rect x="352" y="68" width="252" height="110" rx="10"/><rect x="674" y="68" width="252" height="110" rx="10"/><rect x="996" y="68" width="252" height="110" rx="10"/></g>
+  <g stroke="#ffb86b" stroke-width="2" marker-end="url(#arrow)"><path d="M290 123H338"/><path d="M612 123H660"/><path d="M934 123H982"/></g>
+  <g font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">
+    <g font-size="13" fill="#ffb86b" letter-spacing="2"><text x="156" y="44">01 / INPUT</text><text x="478" y="44">02 / PHYSICS</text><text x="800" y="44">03 / OUTPUT</text><text x="1122" y="44">04 / ADAPTER</text></g>
+    <g font-size="23" font-weight="600" fill="#f3f6fc"><text x="156" y="110">3D scene</text><text x="478" y="110">Radiometry</text><text x="800" y="110">Physical radiance</text><text x="1122" y="110">Detector &amp; display</text></g>
+    <g font-size="15" fill="#b4c2d9"><text x="156" y="141">Temperature · materials · geometry</text><text x="478" y="141">Surface · sky · atmosphere</text><text x="800" y="141">Linear RGBA16F · R channel</text><text x="1122" y="141">Optics · noise · AGC · colormap</text></g>
+    <text x="640" y="218" font-size="16" fill="#b4c2d9">The physical buffer remains the integration boundary.</text>
+  </g>
+</svg>
